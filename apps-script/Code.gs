@@ -17,7 +17,7 @@ const SCHEMA = {
   Zones: ['id', 'name', 'sort'],
   Tables: ['id', 'zoneId', 'name', 'seats', 'sort'],
   Categories: ['id', 'name', 'sort'],
-  Products: ['id', 'categoryId', 'name', 'price', 'stock', 'active'],
+  Products: ['id', 'categoryId', 'name', 'price', 'stock', 'active', 'code', 'nameEn', 'image', 'desc', 'descEn', 'buffet', 'byWeight', 'extras'],
   Bills: ['id', 'tableId', 'tableName', 'status', 'seats', 'openedAt', 'closedAt', 'subtotal', 'discount', 'tax', 'total', 'payMethod', 'received', 'memberId', 'cashier', 'shiftId', 'items'],
   Members: ['id', 'name', 'phone', 'points', 'createdAt'],
   Shifts: ['id', 'status', 'openedAt', 'closedAt', 'openingCash', 'closingCash', 'expectedCash', 'user'],

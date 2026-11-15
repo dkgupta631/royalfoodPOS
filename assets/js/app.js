@@ -17,7 +17,12 @@
   const COLORS = ['#0a7cff', '#1fa855', '#f59e0b', '#ef5350', '#8b5cf6', '#0ea5a4', '#ec4899', '#64748b'];
   const color = s => COLORS[[...String(s)].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
   const view = $('#view'), app = $('#app');
-  const S = { route: '', zone: null, table: null, tab: 'table', cat: 'all', q: '', focusQ: false };
+  const flag = v => String(v) === 'true';
+  const r3 = n => Math.round(n * 1000) / 1000;
+  const pText = p => [p.name, p.nameEn, p.code].join(' ').toLowerCase();
+  const thumbIn = (u, icon = 'utensils') => `${ic(icon)}${u ? `<img src="${esc(u)}" alt="" loading="lazy" onerror="this.remove()">` : ''}`;
+  const thumb = (p, cls = '') => `<span class="thumb ${cls}" style="--c:${color(p.name)}">${thumbIn(DB.img(p))}</span>`;
+  const S = { route: '', zone: null, table: null, tab: 'table', cat: 'all', q: '', focusQ: false, gtab: 'food', gst: 'all' };
   let acts = {};
 
   /* ---------- UI helpers ---------- */
@@ -29,7 +34,7 @@
   }
   function modal(html, wide) {
     const m = document.createElement('div'); m.className = 'modal-back';
-    m.innerHTML = `<div class="modal ${wide ? 'wide' : ''}" role="dialog" aria-modal="true">${html}</div>`;
+    m.innerHTML = `<div class="modal ${typeof wide === 'string' ? wide : wide ? 'wide' : ''}" role="dialog" aria-modal="true">${html}</div>`;
     document.body.appendChild(m); icons(); requestAnimationFrame(() => m.classList.add('show'));
     const close = () => { m.classList.remove('show'); setTimeout(() => m.remove(), 200); };
     m.addEventListener('click', e => { if (e.target === m || e.target.closest('[data-close]')) close(); });
@@ -190,10 +195,11 @@
           let b = DB.openBill(tb.id);
           if (!b) { b = DB.newBill(tb, tb.seats, U.username, openShift().id); DB.log('Open bill', tb.name); }
           const list = DB.items(b);
-          Object.entries(cart).forEach(([pid, q]) => {
-            const p = DB.get('Products', pid); if (!p) return;
-            const ex = list.find(i => i.pid === pid && i.status === 'ordered' && !i.src);
-            if (ex) ex.qty = num(ex.qty) + q; else list.push({ pid, name: p.name, price: num(p.price), qty: q, status: 'ordered' });
+          cart.forEach(c => {
+            const p = DB.get('Products', c.pid); if (!p) return;
+            const name = p.name + (c.ex.length ? ' + ' + c.ex.map(x => x.name).join(', ') : ''), price = num(p.price) + c.ex.reduce((a, x) => a + num(x.price), 0);
+            const ex = list.find(i => i.pid === c.pid && i.name === name && num(i.price) === price && i.status === 'ordered' && !i.src);
+            if (ex) ex.qty = r3(num(ex.qty) + c.qty); else list.push({ pid: c.pid, name, price, qty: c.qty, status: 'ordered' });
           });
           DB.setItems(b, list); toast('Items added'); render();
         });
@@ -224,27 +230,40 @@
     };
   };
 
+  function chooseExtras(p, onOk) {
+    const ex = DB.extras(p);
+    const m = modal(`<h3>${esc(p.name)}</h3><p class="hint">Choose extras for this dish</p><div class="exl">${ex.map((x, i) => `<label class="exo"><input type="checkbox" value="${i}"><span>${esc(x.name)}</span><b>${num(x.price) ? '+' + money(x.price) : 'Free'}</b></label>`).join('')}</div>
+      <div class="actions"><button class="btn ghost" data-close>${esc(t('close'))}</button><button class="btn" data-ok>${ic('plus')} ${esc(t('add'))}</button></div>`);
+    $('[data-ok]', m.el).onclick = () => { m.close(); onOk($$('input:checked', m.el).map(i => ex[+i.value])); };
+  }
   function pickProducts(onDone) {
     const cart = {}; let cat = 'all', q = '';
+    const qtyOf = pid => r3(Object.values(cart).filter(c => c.pid === pid).reduce((a, c) => a + c.qty, 0));
+    const add = (p, qty, ex = []) => { const key = p.id + '|' + ex.map(x => x.name).join('|'); if (!cart[key]) cart[key] = { pid: p.id, qty: 0, ex }; cart[key].qty = r3(cart[key].qty + qty); draw(); };
     const cats = bySort(DB.list('Categories'));
     const m = modal(`<h3>${esc(t('add'))} — ${esc(t('items'))}</h3><div class="pickbar"><input class="input" style="max-width:230px" placeholder="${esc(t('search'))}" data-pq><div class="chips" data-cats></div></div>
       <div class="pgrid" data-grid></div><div class="pickfoot"><b data-sum></b><span style="flex:1"></span><button class="btn ghost" data-close>${esc(t('close'))}</button><button class="btn" data-ok>${esc(t('confirm'))}</button></div>`, true);
     const grid = $('[data-grid]', m.el);
     const draw = () => {
       $('[data-cats]', m.el).innerHTML = [['all', 'All']].concat(cats.map(x => [x.id, x.name])).map(x => `<button class="chip ${x[0] === cat ? 'on' : ''}" data-cat="${esc(x[0])}">${esc(x[1])}</button>`).join('');
-      const list = DB.list('Products').filter(p => active(p) && (cat === 'all' || p.categoryId === cat) && p.name.toLowerCase().includes(q));
-      grid.innerHTML = list.map(p => `<button class="pcard" data-pid="${esc(p.id)}"><span class="av" style="background:${color(p.name)}">${esc(p.name[0] || '?')}</span><b>${esc(p.name)}</b><span class="pr">${money(p.price)} ${esc(CFG.CURRENCY)}</span>
-        ${tracked(p) ? `<small>Stock ${num(p.stock)}</small>` : ''}${cart[p.id] ? `<span class="cnt">${cart[p.id]}</span><span class="ops"><span class="btn ghost sm" data-minus="${esc(p.id)}">${ic('minus')}</span></span>` : ''}</button>`).join('') || empty('package');
-      const n = Object.values(cart).reduce((a, b) => a + b, 0), sum = Object.entries(cart).reduce((a, [id, k]) => a + num((DB.get('Products', id) || {}).price) * k, 0);
-      $('[data-sum]', m.el).textContent = `${n} ${t('itemsUnit')} · ${money(sum)} ${CFG.CURRENCY}`; $('[data-ok]', m.el).disabled = !n;
+      const list = DB.list('Products').filter(p => active(p) && (cat === 'all' || p.categoryId === cat) && pText(p).includes(q));
+      grid.innerHTML = list.map(p => { const k = qtyOf(p.id); return `<button class="pcard" data-pid="${esc(p.id)}">${thumb(p)}<b>${esc(p.name)}</b><span class="pr">${money(p.price)} ${esc(CFG.CURRENCY)}${flag(p.byWeight) ? ' /kg' : ''}</span>
+        ${tracked(p) ? `<small>Stock ${num(p.stock)}</small>` : ''}${k ? `<span class="cnt">${k}</span><span class="ops"><span class="btn ghost sm" data-minus="${esc(p.id)}">${ic('minus')}</span></span>` : ''}</button>`; }).join('') || empty('package');
+      const all = Object.values(cart), n = r3(all.reduce((a, c) => a + c.qty, 0)), sum = all.reduce((a, c) => a + (num((DB.get('Products', c.pid) || {}).price) + c.ex.reduce((x, y) => x + num(y.price), 0)) * c.qty, 0);
+      $('[data-sum]', m.el).textContent = `${n} ${t('itemsUnit')} · ${money(sum)} ${CFG.CURRENCY}`; $('[data-ok]', m.el).disabled = !all.length;
       icons(); grid.classList.add('still');
     };
     m.el.addEventListener('click', e => {
-      const c = e.target.closest('[data-cat]'), mi = e.target.closest('[data-minus]'), p = e.target.closest('[data-pid]');
+      const c = e.target.closest('[data-cat]'), mi = e.target.closest('[data-minus]'), pc = e.target.closest('[data-pid]');
       if (c) { cat = c.dataset.cat; grid.classList.remove('still'); draw(); }
-      else if (mi) { cart[mi.dataset.minus]--; if (cart[mi.dataset.minus] <= 0) delete cart[mi.dataset.minus]; draw(); }
-      else if (p) { cart[p.dataset.pid] = (cart[p.dataset.pid] || 0) + 1; draw(); }
-      else if (e.target.closest('[data-ok]')) { m.close(); onDone(cart); }
+      else if (mi) { const key = Object.keys(cart).filter(k => cart[k].pid === mi.dataset.minus).pop(); if (key) { cart[key].qty = r3(cart[key].qty - 1); if (cart[key].qty <= 0) delete cart[key]; } draw(); }
+      else if (pc) {
+        const p = DB.get('Products', pc.dataset.pid); if (!p) return;
+        if (flag(p.byWeight)) formModal(`${p.name} — ${money(p.price)} ${CFG.CURRENCY} /kg`, [{ k: 'w', label: 'Weight (kg)', type: 'number', req: 1 }], {}, o => { if (num(o.w) <= 0) return false; add(p, num(o.w)); });
+        else if (DB.extras(p).length) chooseExtras(p, ex => add(p, 1, ex));
+        else add(p, 1);
+      }
+      else if (e.target.closest('[data-ok]')) { m.close(); onDone(Object.values(cart)); }
     });
     $('[data-pq]', m.el).addEventListener('input', e => { q = e.target.value.trim().toLowerCase(); draw(); });
     draw();
@@ -438,6 +457,7 @@
     if (S.focusQ) { const i = $('[data-q]', view); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } S.focusQ = false; }
   }
   view.addEventListener('click', e => { const el = e.target.closest('[data-act]'); if (el && !el.disabled && acts[el.dataset.act]) acts[el.dataset.act](el, e); });
+  view.addEventListener('change', e => { const el = e.target.closest('[data-chg]'); if (el && acts[el.dataset.chg]) acts[el.dataset.chg](el, e); });
   view.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('[role=button][data-act]')) e.target.click(); });
   const onQ = e => { if (!e.target.matches('[data-q]') || e.isComposing) return; S.q = e.target.value; S.focusQ = true; render(); };
   view.addEventListener('input', onQ); view.addEventListener('compositionend', onQ);

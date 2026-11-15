@@ -32,7 +32,7 @@
   function say(msg, type = 'ok') { const el = document.createElement('div'); el.className = 'toast ' + type; el.textContent = msg; $('#toasts').appendChild(el); setTimeout(() => el.remove(), 3000); }
   function draw() {
     $('#cats').innerHTML = [{ id: 'all', name: 'All' }].concat(menu.categories).map(c => `<button class="chip ${c.id === cat ? 'on' : ''}" data-cat="${esc(c.id)}">${esc(c.name)}</button>`).join('');
-    $('#grid').innerHTML = menu.products.filter(p => cat === 'all' || p.categoryId === cat).map(p => `<button class="pcard" data-pid="${esc(p.id)}"><span class="av" style="background:${color(p.name)}">${esc(p.name[0] || '?')}</span><b>${esc(p.name)}</b>
+    $('#grid').innerHTML = menu.products.filter(p => cat === 'all' || p.categoryId === cat).map(p => `<button class="pcard" data-pid="${esc(p.id)}"><span class="thumb" style="--c:${color(p.name)}"><b>${esc(p.name[0] || '?')}</b>${DB.img(p) ? `<img src="${esc(DB.img(p))}" alt="" loading="lazy" onerror="this.remove()">` : ''}</span><b>${esc(p.name)}</b>
       <span class="pr">${num(p.price).toLocaleString('en-US')} ${esc(CFG.CURRENCY)}</span>${cart[p.id] ? `<span class="cnt">${cart[p.id]}</span><span class="ops"><span class="btn ghost sm" data-minus="${esc(p.id)}">−</span></span>` : ''}</button>`).join('') || '<div class="empty">No dishes yet</div>';
     $('#grid').classList.add('still');
     const n = Object.values(cart).reduce((a, b) => a + b, 0), total = Object.entries(cart).reduce((a, [id, q]) => a + num((menu.products.find(p => p.id === id) || {}).price) * q, 0);

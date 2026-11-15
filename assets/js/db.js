@@ -143,6 +143,13 @@ const DB = (() => {
     save('Logs', { time: new Date().toISOString(), user: ((session() || {}).user || {}).username || '', action, detail: detail || '' });
   }
 
+  /* ---------- products ---------- */
+  // starter-menu photos (assets/img/foods), used until a product gets its own picture
+  const FOOD_IMG = { 'pad thai': 'pad-thai', 'tom yum kung': 'tom-yum-kung', 'fried rice with pork': 'fried-rice-pork', 'green curry chicken': 'green-curry', 'papaya salad': 'papaya-salad',
+    'grilled pork neck': 'grilled-pork-neck', 'thai iced tea': 'thai-iced-tea', 'iced coffee': 'iced-coffee', 'coconut water': 'coconut-water', 'mango sticky rice': 'mango-sticky-rice', 'coconut ice cream': 'coconut-ice-cream' };
+  const img = p => { if (p.image) return String(p.image); const f = FOOD_IMG[String(p.name || '').trim().toLowerCase()]; return f ? `assets/img/foods/${f}.jpg` : ''; };
+  const extras = p => { try { const a = typeof p.extras === 'string' ? JSON.parse(p.extras || '[]') : (p.extras || []); return Array.isArray(a) ? a.filter(x => x && x.name) : []; } catch (e) { return []; } };
+
   /* ---------- bills ---------- */
   const items = b => { try { return typeof b.items === 'string' ? JSON.parse(b.items || '[]') : (b.items || []); } catch (e) { return []; } };
   function calc(b, its) {
@@ -180,6 +187,6 @@ const DB = (() => {
   }
 
   return { remote, session, login, register, logout, recent, forget, load, flush, list, get, save, remove, log, items, setItems, calc, openBill, newBill,
-    publicMenu, publicOrder, num, uid, onStatus: f => subs.push(f), get status() { return status; }, get pending() { return queue.length; },
+    publicMenu, publicOrder, img, extras, num, uid, onStatus: f => subs.push(f), get status() { return status; }, get pending() { return queue.length; },
     export: () => JSON.stringify(data, null, 2) };
 })();
