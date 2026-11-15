@@ -62,9 +62,10 @@
   function passModal(username, name) {
     const m = document.createElement('div'); m.className = 'modal-back';
     m.innerHTML = `<form class="modal center"><h3 style="font-size:28px">${esc(t('enterPass'))}</h3><p class="sub">${esc(name)}</p>
-      <div class="f"><input type="password" required autocomplete="current-password" aria-label="Password" style="padding:15px;font-size:17px"></div><div class="err"></div>
+      <div class="f pw"><input id="mp" type="password" required autocomplete="current-password" aria-label="Password" style="padding:15px 50px 15px 15px;font-size:17px">
+        <button class="eye" type="button" data-eye="mp" aria-label="Show password"><i data-lucide="eye"></i></button></div><div class="err"></div>
       <div class="actions center"><button class="btn violet">${esc(t('signIn'))}</button><button type="button" class="btn gray" data-close>${esc(t('close'))}</button></div></form>`;
-    document.body.appendChild(m); requestAnimationFrame(() => m.classList.add('show'));
+    document.body.appendChild(m); icons(); requestAnimationFrame(() => m.classList.add('show'));
     const inp = m.querySelector('input'); setTimeout(() => inp.focus(), 100);
     const close = () => { m.classList.remove('show'); setTimeout(() => m.remove(), 200); };
     m.addEventListener('click', e => { if (e.target === m || e.target.closest('[data-close]')) close(); });

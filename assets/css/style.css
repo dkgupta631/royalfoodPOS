@@ -107,6 +107,9 @@ svg.lucide{width:1.2em;height:1.2em;flex:none;stroke-width:1.9}
 .inp input,.inp select{width:100%;padding:14px 44px 14px 46px;border-radius:14px;border:1.5px solid #dbe2ee;background:#fff;outline:0;transition:.2s;color:#0f172a}
 .inp input:focus{border-color:var(--pri);box-shadow:0 0 0 4px rgba(10,124,255,.13)}
 .inp .eye{position:absolute;right:10px;color:#94a3b8;padding:6px;display:grid}
+.f.pw{position:relative}
+.f.pw .eye{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#94a3b8;padding:8px;display:grid;background:none;border:0;cursor:pointer;border-radius:8px}
+.f.pw .eye:hover{color:var(--pri)}
 .btn-main{position:relative;overflow:hidden;width:100%;margin-top:24px;padding:15px;border-radius:15px;color:#fff;font-weight:800;font-size:16.5px;display:flex;justify-content:center;align-items:center;gap:10px;
   background:linear-gradient(90deg,#0a7cff,#3684f7);box-shadow:0 12px 26px rgba(10,124,255,.32);transition:.2s}
 .btn-main:hover{transform:translateY(-2px);box-shadow:0 16px 32px rgba(10,124,255,.4)}.btn-main:active{transform:none}
