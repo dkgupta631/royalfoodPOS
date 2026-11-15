@@ -19,7 +19,8 @@
   const view = $('#view'), app = $('#app');
   const flag = v => String(v) === 'true';
   const r3 = n => Math.round(n * 1000) / 1000;
-  const pText = p => [p.name, p.nameEn, p.code].join(' ').toLowerCase();
+  const pText = p => [p.name, p.code, UI.tr(p.name), ...Object.values(DB.names(p))].join(' ').toLowerCase();
+  const pn = p => DB.pname(p, I18N.lang);
   const thumbIn = (u, icon = 'utensils') => `${ic(icon)}${u ? `<img src="${esc(u)}" alt="" loading="lazy" onerror="this.remove()">` : ''}`;
   const thumb = (p, cls = '') => `<span class="thumb ${cls}" style="--c:${color(p.name)}">${thumbIn(DB.img(p))}</span>`;
   const S = { route: '', zone: null, table: null, tab: 'table', cat: 'all', q: '', focusQ: false, gtab: 'food', gst: 'all' };
@@ -37,7 +38,8 @@
     m.innerHTML = `<div class="modal ${typeof wide === 'string' ? wide : wide ? 'wide' : ''}" role="dialog" aria-modal="true">${html}</div>`;
     document.body.appendChild(m); icons(); requestAnimationFrame(() => m.classList.add('show'));
     const close = () => { m.classList.remove('show'); setTimeout(() => m.remove(), 200); };
-    m.addEventListener('click', e => { if (e.target === m || e.target.closest('[data-close]')) close(); });
+    const fixed = wide === 'pm'; // the product form only closes from its own buttons, so a stray click outside cannot lose typed data
+    m.addEventListener('click', e => { if ((e.target === m && !fixed) || e.target.closest('[data-close]')) close(); });
     const f = $('input:not([type=checkbox]),select', m); if (f && !wide) setTimeout(() => f.focus(), 120);
     return { el: m, close };
   }
@@ -66,7 +68,42 @@
       <table>${row('Subtotal', money(c.subtotal))}${c.discount ? row('Discount', '-' + money(c.discount)) : ''}${c.tax ? row(`Tax ${CFG.TAX_PERCENT}%`, money(c.tax)) : ''}${row(`<b>TOTAL (${esc(cur)})</b>`, `<b>${money(c.total)}</b>`)}
       ${b.payMethod ? row('Paid by', esc(b.payMethod)) : ''}${num(b.received) ? row('Received', money(b.received)) + row('Change', money(num(b.received) - c.total)) : ''}</table><hr><div class="c">Thank you — ${esc(CFG.BRAND)} POS</div>`;
   }
-  function printBill(b) { $('#print').innerHTML = receipt(b); window.print(); }
+  function printHtml(html) { const el = $('#print'); el.innerHTML = html; UI.node(el); window.print(); }
+  function printBill(b) { printHtml(receipt(b)); }
+
+  /* ---------- device settings (printing is per device, so these stay in this browser) ---------- */
+  const SET = (() => { try { return JSON.parse(localStorage.getItem('rf_settings')) || {}; } catch (e) { return {}; } })();
+  const saveSet = () => { try { localStorage.setItem('rf_settings', JSON.stringify(SET)); } catch (e) {} };
+  // One ticket per enabled printer, all in one print job (each on its own page).
+  function printOrder(b, lines) {
+    if (!lines.length) return;
+    const head = title => `<h3>${esc(title)}</h3><div class="c"><b>${esc(b.tableName)}</b> · #${esc(b.id)}</div><div class="c">${fmtDT(new Date())} · ${esc(U.username)}</div><hr>`;
+    const kitchen = (title, big) => `<div class="tk ${big ? 'big' : ''}">${head(title)}<table>${lines.map(l => `<tr><td class="q">${num(l.qty)} ×</td><td>${esc(l.name)}</td></tr>`).join('')}</table><hr></div>`;
+    const cashier = () => `<div class="tk">${head('ORDER — CASHIER')}<table>${lines.map(l => `<tr><td>${esc(l.name)} x${num(l.qty)}</td><td class="r">${money(num(l.price) * num(l.qty))}</td></tr>`).join('')}</table><hr>
+      <table><tr><td><b>TOTAL (${esc(CFG.CURRENCY)})</b></td><td class="r"><b>${money(lines.reduce((a, l) => a + num(l.price) * num(l.qty), 0))}</b></td></tr></table></div>`;
+    const tk = [];
+    if (SET.cashier) tk.push(cashier());
+    if (SET.k1) tk.push(kitchen('KITCHEN 1'));
+    if (SET.k2) tk.push(kitchen('KITCHEN 2'));
+    if (SET.k3) tk.push(kitchen('KITCHEN 3', true));
+    if (tk.length) printHtml(tk.join('<div class="pb"></div>'));
+  }
+  function printQueueCard(x) {
+    printHtml(`<div class="tk"><h3>${esc(U.store || CFG.BRAND)}</h3><div class="c">QUEUE</div><div class="qn">${esc(x.number)}</div><div class="c"><b>${esc(x.name)}</b> · ${esc(x.people)} people</div><div class="c">${fmtDT(x.createdAt)}</div><hr><div class="c">Please wait for your number to be called</div></div>`);
+  }
+  // Adds picker lines to a bill and returns what was added (for the order tickets).
+  function addCart(b, cart) {
+    const list = DB.items(b), added = [];
+    cart.forEach(c => {
+      const p = DB.get('Products', c.pid); if (!p) return;
+      const name = p.name + (c.ex.length ? ' + ' + c.ex.map(x => x.name).join(', ') : ''), price = num(p.price) + c.ex.reduce((a, x) => a + num(x.price), 0);
+      const ex = list.find(i => i.pid === c.pid && i.name === name && num(i.price) === price && i.status === 'ordered' && !i.src);
+      if (ex) ex.qty = r3(num(ex.qty) + c.qty); else list.push({ pid: c.pid, name, price, qty: c.qty, status: 'ordered' });
+      added.push({ name, price, qty: c.qty });
+    });
+    DB.setItems(b, list);
+    return added;
+  }
   function billModal(b) {
     const m = modal(`<div class="rcpt">${receipt(b)}</div><div class="actions"><button class="btn ghost" data-close>${esc(t('close'))}</button><button class="btn" data-p>${ic('printer')} Print</button></div>`);
     $('[data-p]', m.el).onclick = () => printBill(b);
@@ -78,7 +115,7 @@
   V.dashboard = root => {
     const sh = openShift(), exp = new Date(U.expireDate), days = Math.round((exp - Date.now()) / 864e5);
     const rel = isNaN(exp) ? '' : days < 0 ? 'expired' : days < 14 ? `${days} days from now` : days < 60 ? `${Math.round(days / 7)} weeks from now` : `${Math.round(days / 30)} months from now`;
-    const expTxt = isNaN(exp) ? '-' : exp.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    const expTxt = isNaN(exp) ? '-' : exp.toLocaleDateString({ th: 'th-TH', km: 'km-KH', lo: 'lo-LA', zh: 'zh-CN' }[I18N.lang] || 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
     const bills = sh ? DB.list('Bills').filter(b => b.shiftId === sh.id && b.status === 'closed') : [];
     const sales = bills.reduce((a, b) => a + num(b.total), 0), openT = DB.list('Bills').filter(b => b.status === 'open').length;
     const sp = CFG.SUPPORT;
@@ -145,7 +182,7 @@
     root.innerHTML = `<div class="pos">
       <div>
         <div class="pos-tabs"><button class="ptab ${S.tab === 'table' ? 'on' : ''}" data-act="tab" data-id="table">${esc(t('table'))}</button><button class="ptab ${S.tab === 'bill' ? 'on' : ''}" data-act="tab" data-id="bill">${esc(t('bill'))}</button>
-          <span style="flex:1"></span><button class="btn green" data-act="queue">${esc(t('callQueue'))} ${ic('plus')}</button><button class="btn" data-act="reserve">${esc(t('reserve'))} ${ic('plus')}</button></div>
+          <span style="flex:1"></span>${SET.quick ? `<button class="btn amber" data-act="quick">${ic('zap')} Quick bill</button>` : ''}<button class="btn green" data-act="queue">${esc(t('callQueue'))} ${ic('plus')}</button><button class="btn" data-act="reserve">${esc(t('reserve'))} ${ic('plus')}</button></div>
         ${left}
       </div>
       <div class="card detail">
@@ -186,7 +223,16 @@
       tab: el => { S.tab = el.dataset.id; render(true); },
       zone: el => { S.zone = el.dataset.id; S.table = null; render(true); },
       sel: el => { S.table = el.dataset.id; render(); },
-      viewBill: el => { const b = DB.get('Bills', el.dataset.id); if (!b) return; if (b.status === 'open') { const tt = DB.get('Tables', b.tableId); if (tt) { S.zone = tt.zoneId; S.table = tt.id; S.tab = 'table'; render(true); return; } } billModal(b); },
+      quick: () => {
+        if (!needShift()) return;
+        pickProducts(cart => {
+          const b = DB.newBill({ id: '', name: 'Quick bill', seats: '' }, '', U.username, openShift().id);
+          const added = addCart(b, cart); DB.log('Open bill', 'Quick bill'); render(); printOrder(b, added); checkout(b);
+        });
+      },
+      viewBill: el => { const b = DB.get('Bills', el.dataset.id); if (!b) return;
+        if (b.status === 'open' && !b.tableId) { if (needShift()) checkout(b); return; } // unpaid quick bill
+        if (b.status === 'open') { const tt = DB.get('Tables', b.tableId); if (tt) { S.zone = tt.zoneId; S.table = tt.id; S.tab = 'table'; render(true); return; } } billModal(b); },
       inc: el => change(+el.dataset.id, 1), dec: el => change(+el.dataset.id, -1),
       del: el => { its.splice(+el.dataset.id, 1); DB.setItems(bill, its); render(); },
       add: () => {
@@ -194,20 +240,13 @@
         pickProducts(cart => {
           let b = DB.openBill(tb.id);
           if (!b) { b = DB.newBill(tb, tb.seats, U.username, openShift().id); DB.log('Open bill', tb.name); }
-          const list = DB.items(b);
-          cart.forEach(c => {
-            const p = DB.get('Products', c.pid); if (!p) return;
-            const name = p.name + (c.ex.length ? ' + ' + c.ex.map(x => x.name).join(', ') : ''), price = num(p.price) + c.ex.reduce((a, x) => a + num(x.price), 0);
-            const ex = list.find(i => i.pid === c.pid && i.name === name && num(i.price) === price && i.status === 'ordered' && !i.src);
-            if (ex) ex.qty = r3(num(ex.qty) + c.qty); else list.push({ pid: c.pid, name, price, qty: c.qty, status: 'ordered' });
-          });
-          DB.setItems(b, list); toast('Items added'); render();
+          const added = addCart(b, cart); toast('Items added'); render(); printOrder(b, added);
         });
       },
       qr: () => {
         const url = new URL('menu.html?table=' + encodeURIComponent(tb.id), location.href).href;
         const m = modal(`<div class="center"><h3>${esc(t('qrcode'))} — ${esc(tb.name)}</h3><p style="color:var(--muted)">Guests scan to order from this table</p><div id="qrbox" style="display:grid;place-items:center;margin:18px auto;padding:14px;background:#fff;border-radius:16px;width:max-content"></div>
-          <input class="input" readonly value="${esc(url)}" onclick="this.select()">${DB.remote ? '' : '<p class="note" style="text-align:left">Demo mode: the menu link only works in this browser. Connect a Google Sheet to let guests order from their phones.</p>'}</div>
+          <input class="input" readonly value="${esc(url)}" onclick="this.select()">${DB.remote ? '' : '<p class="note" style="text-align:left">Demo mode: the menu link only works in this browser.</p>'}</div>
           <div class="actions center"><button class="btn gray" data-close>${esc(t('close'))}</button></div>`);
         if (window.QRCode) new QRCode($('#qrbox', m.el), { text: url, width: 200, height: 200 });
       },
@@ -232,7 +271,7 @@
 
   function chooseExtras(p, onOk) {
     const ex = DB.extras(p);
-    const m = modal(`<h3>${esc(p.name)}</h3><p class="hint">Choose extras for this dish</p><div class="exl">${ex.map((x, i) => `<label class="exo"><input type="checkbox" value="${i}"><span>${esc(x.name)}</span><b>${num(x.price) ? '+' + money(x.price) : 'Free'}</b></label>`).join('')}</div>
+    const m = modal(`<h3>${esc(pn(p))}</h3><p class="hint">Choose extras for this dish</p><div class="exl">${ex.map((x, i) => `<label class="exo"><input type="checkbox" value="${i}"><span>${esc(x.name)}</span><b>${num(x.price) ? '+' + money(x.price) : 'Free'}</b></label>`).join('')}</div>
       <div class="actions"><button class="btn ghost" data-close>${esc(t('close'))}</button><button class="btn" data-ok>${ic('plus')} ${esc(t('add'))}</button></div>`);
     $('[data-ok]', m.el).onclick = () => { m.close(); onOk($$('input:checked', m.el).map(i => ex[+i.value])); };
   }
@@ -247,7 +286,7 @@
     const draw = () => {
       $('[data-cats]', m.el).innerHTML = [['all', 'All']].concat(cats.map(x => [x.id, x.name])).map(x => `<button class="chip ${x[0] === cat ? 'on' : ''}" data-cat="${esc(x[0])}">${esc(x[1])}</button>`).join('');
       const list = DB.list('Products').filter(p => active(p) && (cat === 'all' || p.categoryId === cat) && pText(p).includes(q));
-      grid.innerHTML = list.map(p => { const k = qtyOf(p.id); return `<button class="pcard" data-pid="${esc(p.id)}">${thumb(p)}<b>${esc(p.name)}</b><span class="pr">${money(p.price)} ${esc(CFG.CURRENCY)}${flag(p.byWeight) ? ' /kg' : ''}</span>
+      grid.innerHTML = list.map(p => { const k = qtyOf(p.id); return `<button class="pcard" data-pid="${esc(p.id)}">${thumb(p)}<b>${esc(pn(p))}</b><span class="pr">${money(p.price)} ${esc(CFG.CURRENCY)}${flag(p.byWeight) ? ' /kg' : ''}</span>
         ${tracked(p) ? `<small>Stock ${num(p.stock)}</small>` : ''}${k ? `<span class="cnt">${k}</span><span class="ops"><span class="btn ghost sm" data-minus="${esc(p.id)}">${ic('minus')}</span></span>` : ''}</button>`; }).join('') || empty('package');
       const all = Object.values(cart), n = r3(all.reduce((a, c) => a + c.qty, 0)), sum = all.reduce((a, c) => a + (num((DB.get('Products', c.pid) || {}).price) + c.ex.reduce((x, y) => x + num(y.price), 0)) * c.qty, 0);
       $('[data-sum]', m.el).textContent = `${n} ${t('itemsUnit')} · ${money(sum)} ${CFG.CURRENCY}`; $('[data-ok]', m.el).disabled = !all.length;
@@ -322,7 +361,8 @@
     $('form', m.el).addEventListener('submit', e => {
       e.preventDefault(); const o = Object.fromEntries(new FormData(e.target)), today = new Date().toDateString();
       const n = DB.list('Queue').filter(x => new Date(x.createdAt).toDateString() === today).length + 1;
-      DB.save('Queue', { number: 'A' + String(n).padStart(3, '0'), name: o.name, people: o.people, status: 'waiting', createdAt: new Date().toISOString() }); e.target.reset(); draw();
+      const row = DB.save('Queue', { number: 'A' + String(n).padStart(3, '0'), name: o.name, people: o.people, status: 'waiting', createdAt: new Date().toISOString() }); e.target.reset(); draw();
+      if (SET.queueCard) printQueueCard(row);
     });
     m.el.addEventListener('click', e => {
       const c = e.target.closest('[data-call]'), d = e.target.closest('[data-done]');
@@ -364,26 +404,178 @@
   };
 
   /* ---------- Goods ---------- */
-  const productFields = () => [{ k: 'name', label: 'Name', req: 1 }, { k: 'categoryId', label: 'Category', options: bySort(DB.list('Categories')).map(c => [c.id, c.name]) },
-    { k: 'price', label: `${t('price')} (${CFG.CURRENCY})`, type: 'number', req: 1 }, { k: 'stock', label: 'Stock (leave empty to not track)', type: 'number' }, { k: 'active', label: 'On sale', options: [['true', 'Yes'], ['false', 'No']] }];
+  // Shrinks a photo so it fits in one Google Sheets cell (50,000 characters).
+  function shrinkImage(file) {
+    return new Promise((ok, bad) => {
+      const im = new Image(), url = URL.createObjectURL(file);
+      im.onerror = () => { URL.revokeObjectURL(url); bad(new Error('image')); };
+      im.onload = () => {
+        URL.revokeObjectURL(url);
+        let out = '';
+        for (const side of [480, 400, 320, 260, 200, 150]) {
+          const k = Math.min(1, side / Math.max(im.width, im.height)), c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(im.width * k)); c.height = Math.max(1, Math.round(im.height * k));
+          const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height);
+          out = c.toDataURL('image/jpeg', .72);
+          if (out.length < 45000) break;
+        }
+        if (out.length < 45000) ok(out); else bad(new Error('size'));
+      };
+      im.src = url;
+    });
+  }
+
+  function productModal(src, tab = 'detail') {
+    const cats = bySort(DB.list('Categories'));
+    if (!cats.length) { toast('Add a group first', 'bad'); return; }
+    const isNew = !src, p = src || { categoryId: S.cat === 'all' ? cats[0].id : S.cat, active: 'true', stock: '' };
+    const cur = esc(CFG.CURRENCY), v = k => esc(p[k] == null ? '' : p[k]), L1 = esc(String(CFG.DEFAULT_LANG || 'th').toUpperCase());
+    let image = p.image || '';
+    const names = DB.names(p), OTHER = I18N.LANGS.map(l => l.code).filter(c => c.toUpperCase() !== L1);
+    const exRow = (x = {}) => `<div class="exr" data-ex><input class="input" data-exn maxlength="60" placeholder="Option name, e.g. Extra rice" value="${esc(x.name || '')}">
+      <div class="ig"><span>+</span><input data-exp type="number" min="0" step="any" inputmode="decimal" placeholder="0" value="${esc(x.price == null ? '' : x.price)}"><span>${cur}</span></div>
+      <button type="button" class="icb del" data-exdel aria-label="Remove option">${ic('trash-2')}</button></div>`;
+    const TABS = [['detail', 'info', t('detail')], ['stock', 'boxes', t('inventory')], ['extra', 'list', 'Extra']];
+    const m = modal(`<form class="pm-form" novalidate>
+      <header class="pm-head"><span class="pm-ic">${ic('utensils')}</span><div class="pm-ttl"><small>${isNew ? 'New item' : esc(t('detail'))}</small><h3 data-ttl>${esc(p.name || 'New item')}</h3></div>
+        <button type="button" class="pm-x" data-close aria-label="${esc(t('close'))}">${ic('x')}</button></header>
+      <nav class="pm-tabs">${TABS.map(x => `<button type="button" data-tab="${x[0]}">${ic(x[1])}<span>${esc(x[2])}</span></button>`).join('')}</nav>
+      <div class="pm-body">
+        <section data-pane="detail">
+          <div class="fr"><label>Picture</label><div class="pic"><span class="thumb lg" data-prev></span><div class="pic-f">
+            <input class="input" data-img inputmode="url" placeholder="https://… image link" value="${esc(/^data:/.test(image) ? '' : image)}">
+            <div class="pic-b"><label class="btn sm ghost">${ic('upload')} Upload photo<input type="file" accept="image/*" data-file hidden></label><button type="button" class="btn sm ghost" data-noimg>${ic('image-off')} Remove</button></div>
+            <small class="hint">Paste an image link or upload a photo. Uploads are resized automatically.</small></div></div></div>
+          <div class="fr"><label for="pmCode">Code</label><div class="two"><input class="input" id="pmCode" name="code" maxlength="30" placeholder="e.g. A01" value="${v('code')}">
+            <select class="input" name="categoryId" aria-label="Group">${cats.map(c => `<option value="${esc(c.id)}" ${c.id === p.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div></div>
+          <div class="fr"><label for="pmName">Name</label><div class="stack"><div class="ig"><span>${L1}</span><input id="pmName" name="name" maxlength="120" placeholder="Name shown on the bill" value="${v('name')}"></div>
+            ${OTHER.map(c => `<div class="ig"><span>${c.toUpperCase()}</span><input data-nm="${c}" maxlength="120" value="${esc(names[c] || '')}"></div>`).join('')}
+            <small class="hint">The other languages are optional. An empty one shows the main name.</small></div></div>
+          <div class="fr"><label>Explanation</label><div class="dbox2"><div class="dtabs"><button type="button" data-dl="desc" class="on">${L1}</button><button type="button" data-dl="descEn">English</button></div>
+            <textarea name="desc" maxlength="500" rows="3" placeholder="Short description of the dish">${v('desc')}</textarea><textarea name="descEn" maxlength="500" rows="3" placeholder="Description in English" hidden>${v('descEn')}</textarea></div></div>
+          <div class="fr"><label for="pmPrice">${esc(t('price'))}</label><div class="stack">
+            <label class="ck"><input type="checkbox" name="buffet" ${flag(p.buffet) ? 'checked' : ''}><span>Buffet</span></label>
+            <div class="ig"><input id="pmPrice" name="price" type="number" min="0" step="any" inputmode="decimal" placeholder="0" value="${v('price')}"><span>${cur}</span></div>
+            <label class="ck"><input type="checkbox" name="byWeight" ${flag(p.byWeight) ? 'checked' : ''}><span>Price by weight (per kg)</span></label></div></div>
+          <div class="fr"><label>${esc(t('status'))}</label><label class="sw"><input type="checkbox" name="active" ${active(p) ? 'checked' : ''}><i></i><span>On sale — shown in POS and the QR menu</span></label></div>
+        </section>
+        <section data-pane="stock" hidden>
+          <div class="fr"><label>Track stock</label><label class="sw"><input type="checkbox" name="track" ${tracked(p) ? 'checked' : ''}><i></i><span>Count this item down when it is sold</span></label></div>
+          <div class="fr"><label for="pmStock">In stock</label><div class="stack"><div class="step"><button type="button" data-st="-1" aria-label="Less">${ic('minus')}</button>
+            <input id="pmStock" name="stock" type="number" step="any" inputmode="decimal" value="${tracked(p) ? num(p.stock) : 0}"><button type="button" data-st="1" aria-label="More">${ic('plus')}</button></div>
+            <small class="hint">Stock goes down at checkout. Items with 5 or fewer left appear in the bell as low stock.</small></div></div>
+        </section>
+        <section data-pane="extra" hidden>
+          <p class="hint" style="margin:0 0 14px">Options staff can add to this dish in POS, such as extra rice or toppings. The option price is added to the dish price.</p>
+          <div data-exlist>${DB.extras(p).map(exRow).join('')}</div>
+          <div class="empty" data-exempty hidden>${ic('list-plus')}<div>No options yet</div></div>
+          <button type="button" class="btn ghost" data-exadd style="margin-top:12px">${ic('plus')} Add option</button>
+        </section>
+      </div>
+      <footer class="pm-foot">${isNew ? '' : `<button type="button" class="btn ghost danger" data-del>${ic('trash-2')}<span>${esc(t('delete'))}</span></button>`}<span class="sp"></span>
+        <button type="button" class="btn ghost" data-close>${ic('x')} ${esc(t('close'))}</button><button class="btn">${ic('save')} ${esc(t('save'))}</button></footer>
+    </form>`, 'pm');
+    const el = m.el, f = $('form', el), fld = n => $(`[name=${n}]`, f), exList = $('[data-exlist]', el);
+    const show = id => { $$('[data-tab]', el).forEach(b => b.classList.toggle('on', b.dataset.tab === id)); $$('[data-pane]', el).forEach(s => { s.hidden = s.dataset.pane !== id; }); };
+    const preview = () => { $('[data-prev]', el).innerHTML = thumbIn(image || (isNew ? '' : DB.img({ ...p, image: '' })), 'image'); icons(); };
+    const exEmpty = () => { $('[data-exempty]', el).hidden = !!exList.children.length; };
+    const stockUi = () => { const on = fld('track').checked; fld('stock').disabled = !on; $$('[data-st]', el).forEach(b => { b.disabled = !on; }); };
+    show(tab); preview(); exEmpty(); stockUi();
+
+    el.addEventListener('click', e => {
+      const tb = e.target.closest('[data-tab]'), dl = e.target.closest('[data-dl]'), st = e.target.closest('[data-st]'), xd = e.target.closest('[data-exdel]');
+      if (tb) show(tb.dataset.tab);
+      else if (dl) { $$('[data-dl]', el).forEach(b => b.classList.toggle('on', b === dl)); fld('desc').hidden = dl.dataset.dl !== 'desc'; fld('descEn').hidden = dl.dataset.dl !== 'descEn'; }
+      else if (st) { fld('stock').value = Math.max(0, r3(num(fld('stock').value) + num(st.dataset.st))); }
+      else if (xd) { xd.closest('[data-ex]').remove(); exEmpty(); }
+      else if (e.target.closest('[data-exadd]')) { exList.insertAdjacentHTML('beforeend', exRow()); icons(); exEmpty(); exList.lastElementChild.querySelector('input').focus(); }
+      else if (e.target.closest('[data-noimg]')) { image = ''; $('[data-img]', el).value = ''; preview(); }
+      else if (e.target.closest('[data-del]')) confirmBox(`${t('delete')} ${p.name}?`, () => { DB.remove('Products', p.id); DB.log('Delete product', p.name); m.close(); toast('Deleted'); render(); });
+    });
+    $('[data-img]', el).addEventListener('input', e => { image = e.target.value.trim(); preview(); });
+    $('[data-file]', el).addEventListener('change', async e => {
+      const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+      try { image = await shrinkImage(file); $('[data-img]', el).value = ''; $('[data-img]', el).placeholder = 'Uploaded photo'; preview(); }
+      catch (err) { toast('Could not use that photo. Try another one.', 'bad'); }
+    });
+    fld('name').addEventListener('input', e => { $('[data-ttl]', el).textContent = e.target.value.trim() || 'New item'; });
+    fld('track').addEventListener('change', stockUi);
+
+    f.addEventListener('submit', e => {
+      e.preventDefault();
+      const name = fld('name').value.trim();
+      if (!name) { show('detail'); fld('name').focus(); toast('Enter a name', 'bad'); return; }
+      if (fld('price').value.trim() === '' || num(fld('price').value) < 0) { show('detail'); fld('price').focus(); toast('Enter a price', 'bad'); return; }
+      const extras = $$('[data-ex]', el).map(r => ({ name: $('[data-exn]', r).value.trim(), price: Math.max(0, num($('[data-exp]', r).value)) })).filter(x => x.name);
+      const nm = {}; $$('[data-nm]', el).forEach(i => { if (i.value.trim()) nm[i.dataset.nm] = i.value.trim(); });
+      const stock = fld('track').checked ? num(fld('stock').value) : '', was = isNew || !tracked(p) ? '' : num(p.stock);
+      const row = Object.assign(src || {}, { categoryId: fld('categoryId').value, name, price: num(fld('price').value), stock, active: String(fld('active').checked),
+        code: fld('code').value.trim(), nameEn: nm.en || '', names: JSON.stringify(nm), image, desc: fld('desc').value.trim(), descEn: fld('descEn').value.trim(),
+        buffet: String(fld('buffet').checked), byWeight: String(fld('byWeight').checked), extras: JSON.stringify(extras) });
+      DB.save('Products', row);
+      if (isNew) DB.log('Add product', name); else if (stock !== was) DB.log('Stock adjust', `${name} ${was === '' ? 'not tracked' : was} → ${stock === '' ? 'not tracked' : stock}`);
+      m.close(); toast('Saved'); render();
+    });
+  }
+
   V.goods = root => {
-    const cats = bySort(DB.list('Categories')), q = S.q.toLowerCase();
-    const list = DB.list('Products').filter(p => (S.cat === 'all' || p.categoryId === S.cat) && p.name.toLowerCase().includes(q));
-    root.innerHTML = `<div class="head"><input class="input" data-q style="max-width:240px" placeholder="${esc(t('search'))}" value="${esc(S.q)}"><span class="sp"></span>
-        <button class="btn ghost" data-act="addCat">${ic('folder-plus')} Category</button><button class="btn" data-act="addP">${ic('plus')} Product</button></div>
-      <div class="chips" style="margin-bottom:16px"><button class="chip ${S.cat === 'all' ? 'on' : ''}" data-act="cat" data-id="all">All</button>${cats.map(c => `<button class="chip ${c.id === S.cat ? 'on' : ''}" data-act="cat" data-id="${esc(c.id)}">${esc(c.name)}</button>`).join('')}
-        ${S.cat !== 'all' ? `<button class="icb" data-act="editCat" aria-label="Edit category">${ic('pencil')}</button>` : ''}</div>
-      <div class="pgrid">${list.map(p => `<div class="pcard ${active(p) ? '' : 'off'}"><span class="av" style="background:${color(p.name)}">${esc(p.name[0] || '?')}</span><b>${esc(p.name)}</b><span class="pr">${money(p.price)} ${esc(CFG.CURRENCY)}</span>
-        <small>${tracked(p) ? 'Stock ' + num(p.stock) : 'Stock not tracked'}${active(p) ? '' : ' · hidden'}</small><span class="ops"><button class="icb" data-act="editP" data-id="${esc(p.id)}" aria-label="Edit">${ic('pencil')}</button><button class="icb del" data-act="delP" data-id="${esc(p.id)}" aria-label="Delete">${ic('trash-2')}</button></span></div>`).join('') || empty('package')}</div>`;
-    acts = {
-      cat: el => { S.cat = el.dataset.id; render(true); },
-      addCat: () => formModal('New category', [{ k: 'name', label: 'Name', req: 1 }], {}, o => { DB.save('Categories', { name: o.name.trim(), sort: cats.length + 1 }); render(); }),
-      editCat: () => { const c = DB.get('Categories', S.cat); formModal('Edit category', [{ k: 'name', label: 'Name', req: 1 }], c, o => { c.name = o.name.trim(); DB.save('Categories', c); render(); },
-        () => { if (DB.list('Products').some(p => p.categoryId === c.id)) { toast('Move or delete its products first', 'bad'); return false; } DB.remove('Categories', c.id); S.cat = 'all'; render(); }); },
-      addP: () => { if (!cats.length) { toast('Add a category first', 'bad'); return; } formModal('New product', productFields(), { categoryId: S.cat === 'all' ? cats[0].id : S.cat, active: 'true' }, o => { DB.save('Products', { ...o, name: o.name.trim(), price: num(o.price) }); DB.log('Add product', o.name); toast('Saved'); render(); }); },
-      editP: el => { const p = DB.get('Products', el.dataset.id); formModal('Edit product', productFields(), p, o => { Object.assign(p, o, { name: o.name.trim(), price: num(o.price) }); DB.save('Products', p); toast('Saved'); render(); }); },
-      delP: el => { const p = DB.get('Products', el.dataset.id); confirmBox(`${t('delete')} ${p.name}?`, () => { DB.remove('Products', p.id); DB.log('Delete product', p.name); render(); }); }
+    const cats = bySort(DB.list('Categories')), all = DB.list('Products'), q = S.q.trim().toLowerCase(), cur = esc(CFG.CURRENCY);
+    if (S.cat !== 'all' && !cats.some(c => c.id === S.cat)) S.cat = 'all';
+    const catName = id => (DB.get('Categories', id) || {}).name || '';
+    const tabs = `<div class="gtabs">${[['food', 'utensils', 'Food', all.length], ['group', 'layers', 'Group', cats.length]].map(x =>
+      `<button class="${S.gtab === x[0] ? 'on' : ''}" data-act="gtab" data-id="${x[0]}">${ic(x[1])}<span>${x[2]}</span><em>${x[3]}</em></button>`).join('')}</div>`;
+    const catForm = (title, vals, onOk) => formModal(title, [{ k: 'name', label: 'Group name', req: 1 }], vals, onOk);
+    const common = {
+      gtab: el => { S.gtab = el.dataset.id; S.q = ''; render(true); },
+      addCat: () => catForm('New group', {}, o => { DB.save('Categories', { name: o.name.trim(), sort: cats.length + 1 }); toast('Saved'); render(); }),
+      editCat: el => { const c = DB.get('Categories', el.dataset.id); catForm('Edit group', c, o => { c.name = o.name.trim(); DB.save('Categories', c); toast('Saved'); render(); }); },
+      delCat: el => { const c = DB.get('Categories', el.dataset.id);
+        if (all.some(p => p.categoryId === c.id)) { toast('Move or delete the items in this group first', 'bad'); return; }
+        confirmBox(`${t('delete')} ${c.name}?`, () => { DB.remove('Categories', c.id); render(); }); }
     };
+
+    if (S.gtab === 'group') {
+      const list = cats.filter(c => c.name.toLowerCase().includes(q));
+      root.innerHTML = `${tabs}<div class="card gcard">
+        <div class="gbar"><label class="gsearch">${ic('search')}<input class="input" data-q placeholder="${esc(t('search'))}" value="${esc(S.q)}"></label><span class="sp"></span><button class="btn green" data-act="addCat">${ic('plus')} ${esc(t('add'))}</button></div>
+        ${list.length ? `<div class="tw"><table class="t"><thead><tr><th>Group</th><th class="r">${esc(t('items'))}</th><th class="r">Edit</th></tr></thead><tbody>${list.map(c => `<tr><td><b>${esc(c.name)}</b></td>
+          <td class="r"><span class="tag b">${all.filter(p => p.categoryId === c.id).length}</span></td>
+          <td class="r" style="white-space:nowrap"><button class="btn sm amber" data-act="editCat" data-id="${esc(c.id)}">${ic('square-pen')} Edit</button> <button class="icb del" data-act="delCat" data-id="${esc(c.id)}" aria-label="${esc(t('delete'))}">${ic('trash-2')}</button></td></tr>`).join('')}</tbody></table></div>` : empty('layers')}</div>`;
+      acts = common; return;
+    }
+
+    const list = all.filter(p => (S.cat === 'all' || p.categoryId === S.cat) && (S.gst === 'all' || (S.gst === 'on') === active(p)) && pText(p).includes(q));
+    const opt = (val, label, sel) => `<option value="${esc(val)}" ${val === sel ? 'selected' : ''}>${esc(label)}</option>`;
+    root.innerHTML = `${tabs}<div class="card gcard">
+      <div class="gbar"><label class="gsearch">${ic('search')}<input class="input" data-q placeholder="${esc(t('search'))}" value="${esc(S.q)}"></label>
+        <select class="input" data-chg="gst" aria-label="${esc(t('status'))}">${opt('all', 'All status', S.gst)}${opt('on', 'On sale', S.gst)}${opt('off', 'Hidden', S.gst)}</select>
+        <select class="input" data-chg="cat" aria-label="Group">${opt('all', 'All group', S.cat)}${cats.map(c => opt(c.id, c.name, S.cat)).join('')}</select>
+        <span class="sp"></span><button class="btn green" data-act="addP">${ic('plus')} ${esc(t('add'))}</button></div>
+      <div class="glist">
+        <div class="gr ghead"><span>Picture</span><span>Code</span><span>Name</span><span class="r">${esc(t('price'))}</span><span class="r">Edit</span></div>
+        ${list.map(p => { const low = tracked(p) && num(p.stock) <= 5, nx = DB.extras(p).length, id = esc(p.id); return `<div class="gr ${active(p) ? '' : 'off'}">
+          <button class="gc-img" data-act="extra" data-id="${id}" aria-label="${esc(p.name)}">${thumb(p)}</button>
+          <div class="gc-code">${p.code ? `<span class="code">${esc(p.code)}</span>` : '<span class="mut">—</span>'}</div>
+          <div class="gc-name"><b>${esc(pn(p))}</b>${pn(p) !== p.name ? `<small>${esc(p.name)}</small>` : ''}
+            <span class="gmeta">${p.code ? `<span class="code only-s">${esc(p.code)}</span>` : ''}${catName(p.categoryId) ? `<span class="tag n">${esc(catName(p.categoryId))}</span>` : ''}${flag(p.buffet) ? '<span class="tag a">Buffet</span>' : ''}${nx ? `<span class="tag b">${nx} extra</span>` : ''}
+              ${tracked(p) ? `<span class="tag ${low ? 'r' : 'g'}">Stock ${num(p.stock)}</span>` : ''}${active(p) ? '' : '<span class="tag n">Hidden</span>'}</span></div>
+          <div class="gc-price"><b>${money(p.price)}</b><small>${cur}${flag(p.byWeight) ? ' /kg' : ''}</small></div>
+          <div class="gc-act"><button class="btn sm" data-act="extra" data-id="${id}">${ic('info')} Extra</button><button class="btn sm amber" data-act="editP" data-id="${id}">${ic('square-pen')} Edit</button>
+            <div class="dd"><button class="btn sm ghost sq" data-dd aria-label="More">${ic('chevron-down')}</button><div class="menu">
+              <button data-act="stockP" data-id="${id}">${ic('boxes')} ${esc(t('inventory'))}</button><button data-act="toggleP" data-id="${id}">${ic(active(p) ? 'eye-off' : 'eye')} ${active(p) ? 'Hide from sale' : 'Put on sale'}</button>
+              <button data-act="copyP" data-id="${id}">${ic('copy')} Duplicate</button><button class="danger" data-act="delP" data-id="${id}">${ic('trash-2')} ${esc(t('delete'))}</button></div></div></div>
+        </div>`; }).join('') || empty('package')}
+      </div>
+      <div class="gfoot">${list.length} / ${all.length} ${esc(t('itemsUnit'))}</div></div>`;
+    const get = el => DB.get('Products', el.dataset.id);
+    acts = Object.assign(common, {
+      gst: el => { S.gst = el.value; render(); }, cat: el => { S.cat = el.value; render(); },
+      addP: () => productModal(null),
+      editP: el => productModal(get(el), 'detail'), extra: el => productModal(get(el), 'extra'), stockP: el => productModal(get(el), 'stock'),
+      toggleP: el => { const p = get(el); p.active = String(!active(p)); DB.save('Products', p); toast(active(p) ? 'On sale' : 'Hidden from sale'); render(); },
+      copyP: el => { const p = get(el); DB.save('Products', { ...p, id: '', name: p.name + ' (copy)', code: '' }); DB.log('Add product', p.name + ' (copy)'); toast('Duplicated'); render(); },
+      delP: el => { const p = get(el); confirmBox(`${t('delete')} ${p.name}?`, () => { DB.remove('Products', p.id); DB.log('Delete product', p.name); render(); }); }
+    });
   };
 
   /* ---------- Tables and zones ---------- */
@@ -412,7 +604,7 @@
     const q = S.q.toLowerCase(), list = DB.list('Products').filter(p => p.name.toLowerCase().includes(q)), catName = id => (DB.get('Categories', id) || {}).name || '-';
     root.innerHTML = `<div class="head"><input class="input" data-q style="max-width:240px" placeholder="${esc(t('search'))}" value="${esc(S.q)}"><span class="sp"></span><span class="tag r">${list.filter(p => tracked(p) && num(p.stock) <= 5).length} low stock</span></div>
       <div class="card tw">${list.length ? `<table class="t"><thead><tr><th>Product</th><th class="hide-s">Category</th><th class="r">${esc(t('price'))}</th><th class="r">Stock</th><th>${esc(t('status'))}</th><th></th></tr></thead><tbody>
-      ${list.map(p => { const low = tracked(p) && num(p.stock) <= 5; return `<tr><td><b>${esc(p.name)}</b></td><td class="hide-s">${esc(catName(p.categoryId))}</td><td class="r">${money(p.price)}</td><td class="r"><b>${tracked(p) ? num(p.stock) : '—'}</b></td>
+      ${list.map(p => { const low = tracked(p) && num(p.stock) <= 5; return `<tr><td><b>${esc(pn(p))}</b></td><td class="hide-s">${esc(catName(p.categoryId))}</td><td class="r">${money(p.price)}</td><td class="r"><b>${tracked(p) ? num(p.stock) : '—'}</b></td>
         <td><span class="tag ${!tracked(p) ? 'n' : low ? 'r' : 'g'}">${!tracked(p) ? 'Not tracked' : low ? 'Low' : 'OK'}</span></td><td class="r"><button class="btn sm ghost" data-act="adj" data-id="${esc(p.id)}">${ic('plus')} Adjust</button></td></tr>`; }).join('')}</tbody></table>` : empty('boxes')}</div>`;
     acts = { adj: el => { const p = DB.get('Products', el.dataset.id); formModal(`Stock — ${p.name} (now ${tracked(p) ? num(p.stock) : 'not tracked'})`, [{ k: 'd', label: 'Add quantity (use a negative number to remove)', type: 'number', req: 1, neg: 1 }, { k: 'note', label: 'Note' }], {},
       o => { p.stock = num(p.stock) + num(o.d); DB.save('Products', p); DB.log('Stock adjust', `${p.name} ${num(o.d) >= 0 ? '+' : ''}${num(o.d)} → ${p.stock}${o.note ? ' (' + o.note + ')' : ''}`); toast('Stock updated'); render(); }); } };
@@ -472,11 +664,8 @@
   $('#btnTheme').onclick = () => { const d = document.documentElement, n = d.dataset.theme === 'dark' ? 'light' : 'dark'; d.dataset.theme = n; try { localStorage.setItem('rf_theme', n); } catch (e) {} themeIcon(); };
   $('#btnFull').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); };
   $('#btnHist').onclick = () => { location.hash = '#/logs'; };
-  $('#btnHelp').onclick = () => modal(`<h3>${ic('book-text')} Manual</h3><ol style="line-height:1.9;padding-left:20px;margin:10px 0 0">
-    <li><b>Home</b> → <b>Open shift</b> and enter the starting cash in the drawer.</li><li><b>POS</b> → tap a table → <b>Add</b> to pick dishes. Green tables are occupied.</li>
-    <li><b>Status</b> marks dishes as served, <b>Move</b> changes table, <b>Invoice</b> prints the bill.</li><li><b>Check Out</b> takes payment, updates stock and member points.</li>
-    <li><b>QRcode</b> shows a code guests can scan to order from their phone.</li><li>Set up dishes in <b>Goods</b>, tables in <b>Table and zone</b>, and stock in <b>Inventory</b>.</li>
-    <li>At the end of the day go to <b>Home</b> → <b>Close shift</b>.</li></ol><div class="actions"><button class="btn gray" data-close>${esc(t('close'))}</button></div>`);
+  $('#btnHelp').onclick = () => modal(`<h3>${ic('book-text')} Manual</h3><ol style="line-height:1.9;padding-left:20px;margin:10px 0 0">${UI.manual().map(x => `<li>${x}</li>`).join('')}</ol>
+    <div class="actions"><button class="btn gray" data-close>${esc(t('close'))}</button></div>`);
   async function resync(quiet) {
     $('#btnSync').classList.add('syncing');
     try { await DB.flush(); await DB.load(); if (!document.querySelector('.modal-back')) render(); if (!quiet) toast(DB.status === 'offline' ? 'Offline — changes are saved on this device' : 'Data is up to date', DB.status === 'offline' ? 'bad' : 'ok'); }
@@ -488,14 +677,17 @@
   DB.onStatus(s => { syncUi(); if (s === 'auth') { DB.logout(); location.replace('index.html'); } });
   function logout() { confirmBox(t('logout') + '?', () => { DB.log('Logout', ''); DB.logout(); location.replace('index.html'); }, false); }
   $('#btnSet').onclick = () => {
-    const m = modal(`<h3>${ic('settings')} ${esc(t('settings'))}</h3>
-      <div class="sumrow"><span>Database</span><b>${DB.remote ? '<span class="tag g">Google Sheets</span>' : '<span class="tag a">Demo (this browser)</span>'}</b></div>
-      <div class="sumrow"><span>Sync</span><b>${esc(DB.status)}${DB.pending ? ` · ${DB.pending} pending` : ''}</b></div>
-      <div class="sumrow"><span>Currency</span><b>${esc(CFG.CURRENCY)}</b></div><div class="sumrow"><span>Tax</span><b>${num(CFG.TAX_PERCENT)}%</b></div>
-      <div class="sumrow"><span>Member points</span><b>1 per ${num(CFG.POINTS_PER)} ${esc(CFG.CURRENCY)}</b></div>
-      <p class="note">These values are set in <b>assets/js/config.js</b>.</p>
-      <div class="actions"><button class="btn ghost" data-b>${ic('download')} ${esc(t('download'))}</button><button class="btn red" data-o>${ic('log-out')} ${esc(t('logout'))}</button><button class="btn gray" data-close>${esc(t('close'))}</button></div>`);
-    $('[data-b]', m.el).onclick = backup; $('[data-o]', m.el).onclick = () => { m.close(); logout(); };
+    const sw = (k, label, hint) => `<label class="sw srow"><span>${esc(label)}${hint ? `<small>${esc(hint)}</small>` : ''}</span><input type="checkbox" data-set="${k}" ${SET[k] ? 'checked' : ''}><i></i></label>`;
+    const m = modal(`<header class="pm-head"><span class="pm-ic blue">${ic('settings')}</span><div class="pm-ttl"><h3>${esc(t('settings'))}</h3><small>Printing · Other settings</small></div>
+        <button type="button" class="pm-x" data-close aria-label="${esc(t('close'))}">${ic('x')}</button></header>
+      <div class="dr-body">
+        <section class="sg"><h4>${ic('printer')} Print system in the kitchen</h4>
+          ${sw('cashier', 'Print in the cashier', 'Order slip with prices')}${sw('k1', 'Print 1st kitchen')}${sw('k2', 'Kitchen printing system number 2')}${sw('k3', 'Kitchen print v3', 'Large-text ticket')}</section>
+        <section class="sg"><h4>${ic('sliders-horizontal')} Other settings</h4>
+          ${sw('quick', 'Add quick bill', 'Sell without a table from POS')}${sw('queueCard', 'Print queue card', 'When a queue number is added')}</section>
+        <p class="hint">These switches are saved on this device. Tickets print when dishes are added in POS, through the browser print dialog.</p>
+      </div>`, 'drawer');
+    m.el.addEventListener('change', e => { const k = e.target.dataset.set; if (!k) return; SET[k] = e.target.checked; saveSet(); if (S.route === 'pos') render(); });
   };
   function langUi() {
     $('#btnLang').innerHTML = I18N.cur.flag;
@@ -518,7 +710,7 @@
     $$('.dd.open').forEach(d => { if (d !== cur) d.classList.remove('open'); });
     if (cur) cur.classList.toggle('open'); else if (!e.target.closest('.dd .menu .mi')) $$('.dd.open').forEach(d => d.classList.remove('open'));
   });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { const all = $$('.modal-back'), m = all[all.length - 1]; if (m) m.click(); } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { const all = $$('.modal-back'), m = all[all.length - 1]; if (m) ($('.pm [data-close]', m) || m).click(); } });
 
   /* ---------- boot ---------- */
   $('#splashSub').textContent = CFG.SUBTITLE; $('#company').textContent = CFG.COMPANY;

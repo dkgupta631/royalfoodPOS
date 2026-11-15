@@ -17,7 +17,7 @@ const SCHEMA = {
   Zones: ['id', 'name', 'sort'],
   Tables: ['id', 'zoneId', 'name', 'seats', 'sort'],
   Categories: ['id', 'name', 'sort'],
-  Products: ['id', 'categoryId', 'name', 'price', 'stock', 'active', 'code', 'nameEn', 'image', 'desc', 'descEn', 'buffet', 'byWeight', 'extras'],
+  Products: ['id', 'categoryId', 'name', 'price', 'stock', 'active', 'code', 'nameEn', 'image', 'desc', 'descEn', 'buffet', 'byWeight', 'extras', 'names'],
   Bills: ['id', 'tableId', 'tableName', 'status', 'seats', 'openedAt', 'closedAt', 'subtotal', 'discount', 'tax', 'total', 'payMethod', 'received', 'memberId', 'cashier', 'shiftId', 'items'],
   Members: ['id', 'name', 'phone', 'points', 'createdAt'],
   Shifts: ['id', 'status', 'openedAt', 'closedAt', 'openingCash', 'closingCash', 'expectedCash', 'user'],
@@ -30,7 +30,7 @@ const DATA_SHEETS = Object.keys(SCHEMA).filter(function (s) { return s !== 'User
 function setup() {
   ensureSheets_();
   if (!read_('Users').length) {
-    upsert_('Users', { id: 'U1', username: 'admin', passwordHash: sha_('admin:admin123'), name: 'Admin', store: 'Royalfood Restaurant',
+    upsert_('Users', { id: '1', username: 'admin', passwordHash: sha_('admin:admin123'), name: 'Admin', store: 'Royalfood Restaurant',
       role: 'owner', package: 'Standard', expireDate: isoDate_(365), createdAt: new Date().toISOString() });
   }
 }
@@ -48,6 +48,12 @@ function doPost(e) {
     }
     if (!auth_(b.token)) return out_({ ok: false, error: 'auth' });
     switch (b.action) {
+      case 'ids': // a device asks for blocks of unused id numbers, e.g. {Bills: 10, Logs: 10}
+        return out_(withLock_(function () {
+          var ids = {};
+          Object.keys(b.need || {}).forEach(function (s) { if (DATA_SHEETS.indexOf(s) >= 0) ids[s] = reserve_(s, Math.min(50, Math.max(1, Math.floor(Number(b.need[s])) || 1))); });
+          return { ok: true, ids: ids };
+        }));
       case 'all':
         ensureSheets_();
         var data = {};
@@ -94,7 +100,7 @@ function register_(b) {
   if (!/^[\w.-]{3,30}$/.test(name) || !/^[0-9a-f]{64}$/.test(String(b.hash))) return { ok: false, error: 'Invalid username' };
   return withLock_(function () {
     if (read_('Users').some(function (x) { return x.username.toLowerCase() === name.toLowerCase(); })) return { ok: false, error: 'Username already exists' };
-    var u = { id: 'U' + Date.now().toString(36), username: name, passwordHash: b.hash, name: String(b.name || name).slice(0, 80), store: String(b.store || '').slice(0, 80),
+    var u = { id: String(reserve_('Users', 1)[0]), username: name, passwordHash: b.hash, name: String(b.name || name).slice(0, 80), store: String(b.store || '').slice(0, 80),
       role: 'staff', package: str_(b.package, 60) || 'Standard', expireDate: isoDate_(b.package ? 7 : 365), createdAt: new Date().toISOString(),
       phone: str_(b.phone, 20).replace(/[^\d+]/g, ''), email: str_(b.email, 120), address: str_(b.address, 200), tables: int_(b.tables), billing: b.billing === 'year' ? 'year' : b.billing === 'month' ? 'month' : '',
       price: int_(b.price), options: str_(b.options, 200) };
@@ -114,7 +120,7 @@ function order_(b) {
   if (!tb) return { ok: false, error: 'Table not found' };
   var prods = read_('Products'), cart = (b.items || []).slice(0, 50);
   var bill = read_('Bills').filter(function (x) { return x.tableId === tb.id && x.status === 'open'; })[0] ||
-    { id: 'B' + Date.now().toString(36), tableId: tb.id, tableName: tb.name, status: 'open', seats: tb.seats, openedAt: new Date().toISOString(), discount: 0, cashier: 'QR', items: '[]' };
+    { id: String(reserve_('Bills', 1)[0]), tableId: tb.id, tableName: tb.name, status: 'open', seats: tb.seats, openedAt: new Date().toISOString(), discount: 0, cashier: 'QR', items: '[]' };
   var items = JSON.parse(bill.items || '[]');
   cart.forEach(function (c) {
     var p = prods.filter(function (x) { return x.id === c.pid && x.active !== 'false'; })[0], q = Math.floor(Number(c.qty));
@@ -157,6 +163,50 @@ function upsert_(name, row) {
   sh.getRange(r, 1, 1, h.length).setNumberFormat('@').setValues([vals]); // plain text: keeps leading zeros, blocks formulas
 }
 function del_(name, id) { var sh = sheet_(name), r = rowIndex_(sh, id); if (r > 0) sh.deleteRow(r); }
+/* ---------- numeric ids: 1, 2, 3 … ---------- */
+var FK_ = { Tables: { zoneId: 'Zones' }, Products: { categoryId: 'Categories' }, Bills: { tableId: 'Tables', shiftId: 'Shifts', memberId: 'Members' }, Reservations: { tableId: 'Tables' } };
+function maxId_(name) {
+  var sh = sheet_(name), last = sh.getLastRow(), m = 0;
+  if (last < 2) return 0;
+  sh.getRange(2, 1, last - 1, 1).getDisplayValues().forEach(function (r) { var n = Number(r[0]); if (n > m && n < 1e9 && Math.floor(n) === n) m = n; });
+  return m;
+}
+/** Hands out the next n unused numbers for a tab and remembers them, so they are never given twice. Call inside a lock. */
+function reserve_(name, n) {
+  var props = PropertiesService.getScriptProperties(), key = 'seq_' + name;
+  var start = Math.max(Number(props.getProperty(key)) || 0, maxId_(name)) + 1, out = [];
+  for (var i = 0; i < n; i++) out.push(start + i);
+  props.setProperty(key, String(start + n - 1));
+  return out;
+}
+/**
+ * Run ONCE from the toolbar to turn old ids (P1, C1, Bmwh…) into 1, 2, 3 … in every tab.
+ * Rows keep their order; links between tabs (category of a product, table of a bill, dishes inside bills) are updated.
+ * Before running: make sure every device has finished syncing. After running: reload the app on every device.
+ */
+function renumberIds() {
+  withLock_(function () {
+    ensureSheets_();
+    var maps = {}, rows = {}, names = Object.keys(SCHEMA);
+    names.forEach(function (name) { rows[name] = read_(name); maps[name] = {}; rows[name].forEach(function (r, i) { maps[name][r.id] = String(i + 1); }); });
+    names.forEach(function (name) {
+      var h = SCHEMA[name], fk = FK_[name] || {};
+      var out = rows[name].map(function (r) {
+        r.id = maps[name][r.id];
+        Object.keys(fk).forEach(function (col) { if (r[col] && maps[fk[col]][r[col]]) r[col] = maps[fk[col]][r[col]]; });
+        if (name === 'Bills') {
+          try { var its = JSON.parse(r.items || '[]'); its.forEach(function (i) { if (maps.Products[i.pid]) i.pid = maps.Products[i.pid]; }); r.items = JSON.stringify(its); } catch (e) {}
+        }
+        return h.map(function (k) { return r[k] == null ? '' : String(r[k]); });
+      });
+      var sh = sheet_(name), last = sh.getLastRow();
+      if (last > 1) sh.getRange(2, 1, last - 1, sh.getLastColumn()).clearContent();
+      if (out.length) sh.getRange(2, 1, out.length, h.length).setNumberFormat('@').setValues(out);
+      PropertiesService.getScriptProperties().setProperty('seq_' + name, String(out.length));
+    });
+  });
+}
+
 function withLock_(fn) { var lock = LockService.getScriptLock(); lock.waitLock(20000); try { return fn(); } finally { lock.releaseLock(); } }
 function sha_(text) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text, Utilities.Charset.UTF_8)

@@ -32,6 +32,22 @@ After you edit `Code.gs` later, publish it with **Deploy → Manage deployments 
 
 `register.html` walks a new user through choosing a service, a package (Buffet, A la carte, Full Options), add-on functions with monthly or yearly billing, and a sign-up form. It then creates the account with a 7-day trial and saves the package, price, table count, phone, email and address in the **Users** tab. There is no online payment and no SMS code step; the invite code is what stops strangers from registering.
 
+## Goods
+
+The Goods page lists every dish with its picture, code, name, price and stock. **Extra** and **Edit** open one popup with three tabs:
+
+- **Detail**: picture (paste an image link or upload a photo), code, group, name in two languages, explanation, price, Buffet, price by weight, on sale.
+- **Inventory**: turn stock tracking on or off and set the quantity.
+- **Extra**: options such as "Extra rice +10". In POS, staff pick them when adding the dish and the option price is added to the line.
+
+The product columns `code`, `nameEn`, `image`, `desc`, `descEn`, `buffet`, `byWeight` and `extras` were added to the **Products** tab. Paste the current `apps-script/Code.gs` into Apps Script and deploy a **New version**, otherwise the sheet drops these fields. Starter-menu photos are in `assets/img/foods` (credits in `CREDITS.md` there).
+
+## Row ids
+
+Every tab uses plain number ids: 1, 2, 3 … Each device takes its ids from a small block of numbers handed out by the script, so two devices never create the same id. With more than one device the numbers can skip (for example 1–10 on one device, 11–20 on another).
+
+To convert a sheet that still has old ids such as `P1` or `Bmwh…`: let every device finish syncing, then in Apps Script choose the `renumberIds` function and press **Run** once, and reload the app on every device. Table QR codes contain the table id, so print them again afterwards.
+
 ## 2. Deploy with GitHub Pages
 
 1. Push this folder to your repository's `main` branch.

@@ -1,5 +1,5 @@
 /* Shared: logo, languages, translations */
-const LOGO_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b9bff"/><stop offset="1" stop-color="#2a56c6"/></linearGradient></defs><circle cx="32" cy="32" r="30" fill="url(#lg)"/><path d="M15 42 L12 22 L23 31 L32 16 L41 31 L52 22 L49 42 Z" fill="#fff"/><rect x="16" y="45" width="32" height="4.5" rx="2.2" fill="#fff"/></svg>`;
+const LOGO_SVG = `<img src="assets/img/logo.png" alt="" decoding="async">`; // the brand mark (assets/img/logo.png)
 
 const I18N = (() => {
   const LANGS = [
@@ -11,7 +11,7 @@ const I18N = (() => {
   const D = {
     en: {
       online: 'Online', tagline: 'Smart Restaurant Platform', live: 'LIVE', liveSales: 'Live sales',
-      cloudDb: 'Cloud database', cloudDbSub: 'Google Sheets',
+      cloudDb: 'Cloud database', cloudDbSub: 'Secure online backup',
       s1t: 'Easy Restaurant Management', s1s: 'A POS system designed specifically for restaurants',
       s2t: 'Queue — Online Queue Booking', s2s: 'Customers book queues via mobile, reduce wait time, increase sales',
       s3t: 'Real-time Sales Reports', s3s: 'Track sales and analyze data anytime, anywhere',

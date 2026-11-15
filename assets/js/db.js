@@ -4,14 +4,36 @@
 const DB = (() => {
   const CFG = window.APP_CONFIG || {};
   const remote = !!CFG.API_URL;
-  const K = { db: 'rf_db', q: 'rf_queue', s: 'rf_session', u: 'rf_users', r: 'rf_recent' };
+  const K = { db: 'rf_db', q: 'rf_queue', s: 'rf_session', u: 'rf_users', r: 'rf_recent', i: 'rf_ids' };
   const SHEETS = ['Zones', 'Tables', 'Categories', 'Products', 'Bills', 'Members', 'Shifts', 'Logs', 'Queue', 'Reservations'];
   const jget = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
   const jset = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
   const blank = () => Object.fromEntries(SHEETS.map(s => [s, []]));
   let data = blank(), queue = jget(K.q, []), flushing = false, status = remote ? 'synced' : 'local';
   const subs = [];
-  const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  /* Row ids are plain numbers: 1, 2, 3 …
+     With a sheet connected, each device asks the server for a small block of unused numbers per tab and takes ids
+     from it, so two devices can never give two rows the same id. In demo mode the next id is simply the highest + 1. */
+  const POOL = 10, LOW = 4, SMALL = 1e9;
+  let pool = jget(K.i, {}), refilling = false;
+  const maxId = arr => arr.reduce((m, r) => { const n = Number(r.id); return Number.isInteger(n) && n > m && n < SMALL ? n : m; }, 0);
+  async function refill() {
+    if (!remote || refilling) return;
+    const need = {}; SHEETS.forEach(s => { if ((pool[s] || []).length <= LOW) need[s] = POOL; });
+    if (!Object.keys(need).length) return;
+    refilling = true;
+    try {
+      const res = await api({ action: 'ids', token: (session() || {}).token, need });
+      if (res.ok) { Object.entries(res.ids || {}).forEach(([s, a]) => { pool[s] = (pool[s] || []).concat(a.map(String)); }); jset(K.i, pool); }
+    } catch (e) {}
+    refilling = false;
+  }
+  function uid(sheet) {
+    if (!remote) return String(maxId(data[sheet] || []) + 1);
+    const p = pool[sheet] || [], id = p.shift();
+    jset(K.i, pool); if (p.length <= LOW) refill();
+    return id || String(Date.now() * 100 + Math.floor(Math.random() * 100)); // offline with no numbers left: a long, still unique number
+  }
   const num = v => Number(v) || 0;
 
   async function sha(text) {
@@ -32,7 +54,7 @@ const DB = (() => {
   async function localUsers() {
     let u = jget(K.u, null);
     if (!u) {
-      u = [{ id: 'U1', username: 'admin', passwordHash: await hash('admin', 'admin123'), name: 'Admin', store: 'Royalfood Restaurant', role: 'owner', package: 'Standard', expireDate: yearAhead() }];
+      u = [{ id: '1', username: 'admin', passwordHash: await hash('admin', 'admin123'), name: 'Admin', store: 'Royalfood Restaurant', role: 'owner', package: 'Standard', expireDate: yearAhead() }];
       jset(K.u, u);
     }
     return u;
@@ -66,27 +88,27 @@ const DB = (() => {
     }
     const users = await localUsers();
     if (users.some(x => x.username.toLowerCase() === username.toLowerCase())) throw new Error('Username already exists');
-    const u = { id: uid('U'), username, passwordHash: h, name, store, role: 'staff', package: extra.package || 'Standard',
+    const u = { id: String(users.reduce((m, x) => Math.max(m, Number(x.id) || 0), 0) + 1), username, passwordHash: h, name, store, role: 'staff', package: extra.package || 'Standard',
       expireDate: extra.trialDays ? new Date(Date.now() + extra.trialDays * 864e5).toISOString().slice(0, 10) : yearAhead(),
       phone: extra.phone || '', email: extra.email || '', address: extra.address || '', tables: extra.tables || '', billing: extra.billing || '', price: extra.price || '', options: extra.options || '' };
     users.push(u); jset(K.u, users);
     const { passwordHash, ...user } = u;
     return startSession('local', user);
   }
-  function logout() { localStorage.removeItem(K.s); }
+  function logout() { localStorage.removeItem(K.s); localStorage.removeItem(K.i); pool = {}; }
   const recent = () => jget(K.r, []);
   const forget = username => jset(K.r, recent().filter(x => x.username !== username));
 
   /* ---------- data ---------- */
   function seed() {
     const d = blank();
-    d.Zones.push({ id: 'Z1', name: 'Zone 1', sort: 1 });
-    for (let i = 1; i <= 20; i++) d.Tables.push({ id: 'T' + i, zoneId: 'Z1', name: 'GB ' + i, seats: 4, sort: i });
-    [['C1', 'Food'], ['C2', 'Drinks'], ['C3', 'Dessert']].forEach((c, i) => d.Categories.push({ id: c[0], name: c[1], sort: i + 1 }));
+    d.Zones.push({ id: '1', name: 'Zone 1', sort: 1 });
+    for (let i = 1; i <= 20; i++) d.Tables.push({ id: String(i), zoneId: '1', name: 'GB ' + i, seats: 4, sort: i });
+    [['1', 'Food'], ['2', 'Drinks'], ['3', 'Dessert']].forEach((c, i) => d.Categories.push({ id: c[0], name: c[1], sort: i + 1 }));
     [['C1', 'Pad Thai', 80], ['C1', 'Tom Yum Kung', 150], ['C1', 'Fried Rice with Pork', 70], ['C1', 'Green Curry Chicken', 120], ['C1', 'Papaya Salad', 60],
      ['C1', 'Grilled Pork Neck', 140], ['C2', 'Thai Iced Tea', 45], ['C2', 'Iced Coffee', 50], ['C2', 'Coconut Water', 40], ['C2', 'Soda', 25],
      ['C3', 'Mango Sticky Rice', 90], ['C3', 'Coconut Ice Cream', 55]]
-      .forEach((p, i) => d.Products.push({ id: 'P' + (i + 1), categoryId: p[0], name: p[1], price: p[2], stock: 50, active: 'true' }));
+      .forEach((p, i) => d.Products.push({ id: String(i + 1), categoryId: p[0].slice(1), name: p[1], price: p[2], stock: 50, active: 'true' }));
     return d;
   }
   const normalize = d => { const o = blank(); SHEETS.forEach(s => { if (Array.isArray(d && d[s])) o[s] = d[s].filter(r => r && r.id); }); return o; };
@@ -104,7 +126,7 @@ const DB = (() => {
         const s = seed();
         ['Zones', 'Tables', 'Categories', 'Products'].forEach(sh => s[sh].forEach(r => save(sh, r)));
       }
-      persist(); setStatus(queue.length ? 'syncing' : 'synced');
+      persist(); await refill(); setStatus(queue.length ? 'syncing' : 'synced');
     } catch (e) {
       if (e.message === 'auth') throw e;
       data = normalize(jget(K.db, {})); setStatus('offline');
@@ -129,7 +151,7 @@ const DB = (() => {
   const list = s => data[s] || [];
   const get = (s, id) => list(s).find(r => r.id === id);
   function save(sheet, row) {
-    if (!row.id) row.id = uid(sheet[0]);
+    if (!row.id) row.id = uid(sheet);
     const arr = data[sheet], i = arr.findIndex(r => r.id === row.id);
     if (i >= 0) arr[i] = row; else arr.push(row);
     persist(); enqueue({ op: 'upsert', sheet, row });
@@ -148,6 +170,9 @@ const DB = (() => {
   const FOOD_IMG = { 'pad thai': 'pad-thai', 'tom yum kung': 'tom-yum-kung', 'fried rice with pork': 'fried-rice-pork', 'green curry chicken': 'green-curry', 'papaya salad': 'papaya-salad',
     'grilled pork neck': 'grilled-pork-neck', 'thai iced tea': 'thai-iced-tea', 'iced coffee': 'iced-coffee', 'coconut water': 'coconut-water', 'mango sticky rice': 'mango-sticky-rice', 'coconut ice cream': 'coconut-ice-cream' };
   const img = p => { if (p.image) return String(p.image); const f = FOOD_IMG[String(p.name || '').trim().toLowerCase()]; return f ? `assets/img/foods/${f}.jpg` : ''; };
+  // names in other languages: {en, km, lo, zh, …}; the main name is p.name
+  const names = p => { let o = {}; try { o = typeof p.names === 'string' ? JSON.parse(p.names || '{}') : (p.names || {}); } catch (e) {} if (!o || typeof o !== 'object') o = {}; if (!o.en && p.nameEn) o.en = p.nameEn; return o; };
+  const pname = (p, lang) => names(p)[lang] || p.name;
   const extras = p => { try { const a = typeof p.extras === 'string' ? JSON.parse(p.extras || '[]') : (p.extras || []); return Array.isArray(a) ? a.filter(x => x && x.name) : []; } catch (e) { return []; } };
 
   /* ---------- bills ---------- */
@@ -187,6 +212,6 @@ const DB = (() => {
   }
 
   return { remote, session, login, register, logout, recent, forget, load, flush, list, get, save, remove, log, items, setItems, calc, openBill, newBill,
-    publicMenu, publicOrder, img, extras, num, uid, onStatus: f => subs.push(f), get status() { return status; }, get pending() { return queue.length; },
+    publicMenu, publicOrder, img, extras, names, pname, num, uid, onStatus: f => subs.push(f), get status() { return status; }, get pending() { return queue.length; },
     export: () => JSON.stringify(data, null, 2) };
 })();
