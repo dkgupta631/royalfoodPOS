@@ -6,7 +6,7 @@
 
   $('#domain').textContent = CFG.DOMAIN; $('#yr').textContent = new Date().getFullYear();
   $('#company').textContent = CFG.COMPANY; $('#splashSub').textContent = CFG.SUBTITLE;
-  $('#demoNote').hidden = DB.remote; $('#codeField').hidden = !DB.remote; $('#rc').required = DB.remote;
+  $('#demoNote').hidden = DB.remote;
 
   /* hero slider */
   const N = 4, imgs = [...document.querySelectorAll('#shot img')], bars = $('#bars');
@@ -77,14 +77,8 @@
 
   /* forms */
   $('#loginForm').addEventListener('submit', e => { e.preventDefault(); doLogin($('#u').value, $('#p').value, $('#btnLogin'), $('#err')); });
-  $('#regForm').addEventListener('submit', async e => {
-    e.preventDefault(); const btn = $('#btnReg'), er = $('#rerr'); er.classList.remove('show'); busy(btn, true);
-    try { await DB.register({ name: $('#rn').value.trim(), store: $('#rs').value.trim(), username: $('#ru').value, password: $('#rp').value, code: $('#rc').value.trim() }); enter(); }
-    catch (x) { busy(btn, false); fail(er, x.message); }
-  });
   document.addEventListener('click', e => {
-    const go = e.target.closest('[data-go]'), eye = e.target.closest('[data-eye]');
-    if (go) { const reg = go.dataset.go === 'reg'; $('#regForm').hidden = !reg; $('#loginForm').hidden = reg; }
+    const eye = e.target.closest('[data-eye]');
     if (eye) { const i = document.getElementById(eye.dataset.eye), sh = i.type === 'password'; i.type = sh ? 'text' : 'password'; eye.innerHTML = `<i data-lucide="${sh ? 'eye-off' : 'eye'}"></i>`; icons(); }
   });
 

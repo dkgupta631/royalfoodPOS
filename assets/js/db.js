@@ -56,17 +56,19 @@ const DB = (() => {
     const { passwordHash, ...user } = u;
     return startSession('local', user);
   }
-  async function register({ username, password, name, store, code }) {
+  async function register({ username, password, name, store, code, ...extra }) {
     username = String(username).trim();
     const h = await hash(username, password);
     if (remote) {
-      const res = await api({ action: 'register', username, hash: h, name, store, code });
+      const res = await api({ action: 'register', username, hash: h, name, store, code, ...extra });
       if (!res.ok) throw new Error(res.error || 'Registration failed');
       return startSession(res.token, res.user);
     }
     const users = await localUsers();
     if (users.some(x => x.username.toLowerCase() === username.toLowerCase())) throw new Error('Username already exists');
-    const u = { id: uid('U'), username, passwordHash: h, name, store, role: 'staff', package: 'Standard', expireDate: yearAhead() };
+    const u = { id: uid('U'), username, passwordHash: h, name, store, role: 'staff', package: extra.package || 'Standard',
+      expireDate: extra.trialDays ? new Date(Date.now() + extra.trialDays * 864e5).toISOString().slice(0, 10) : yearAhead(),
+      phone: extra.phone || '', email: extra.email || '', address: extra.address || '', tables: extra.tables || '', billing: extra.billing || '', price: extra.price || '', options: extra.options || '' };
     users.push(u); jset(K.u, users);
     const { passwordHash, ...user } = u;
     return startSession('local', user);

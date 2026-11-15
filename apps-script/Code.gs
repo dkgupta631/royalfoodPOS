@@ -13,7 +13,7 @@ const REGISTER_CODE = 'ROYAL2026'; // people need this code to create an account
 const SESSION_SECONDS = 21600;     // 6 hours (the maximum Apps Script cache lifetime)
 
 const SCHEMA = {
-  Users: ['id', 'username', 'passwordHash', 'name', 'store', 'role', 'package', 'expireDate', 'createdAt'],
+  Users: ['id', 'username', 'passwordHash', 'name', 'store', 'role', 'package', 'expireDate', 'createdAt', 'phone', 'email', 'address', 'tables', 'billing', 'price', 'options'],
   Zones: ['id', 'name', 'sort'],
   Tables: ['id', 'zoneId', 'name', 'seats', 'sort'],
   Categories: ['id', 'name', 'sort'],
@@ -95,7 +95,9 @@ function register_(b) {
   return withLock_(function () {
     if (read_('Users').some(function (x) { return x.username.toLowerCase() === name.toLowerCase(); })) return { ok: false, error: 'Username already exists' };
     var u = { id: 'U' + Date.now().toString(36), username: name, passwordHash: b.hash, name: String(b.name || name).slice(0, 80), store: String(b.store || '').slice(0, 80),
-      role: 'staff', package: 'Standard', expireDate: isoDate_(365), createdAt: new Date().toISOString() };
+      role: 'staff', package: str_(b.package, 60) || 'Standard', expireDate: isoDate_(b.package ? 7 : 365), createdAt: new Date().toISOString(),
+      phone: str_(b.phone, 20).replace(/[^\d+]/g, ''), email: str_(b.email, 120), address: str_(b.address, 200), tables: int_(b.tables), billing: b.billing === 'year' ? 'year' : b.billing === 'month' ? 'month' : '',
+      price: int_(b.price), options: str_(b.options, 200) };
     upsert_('Users', u);
     return newSession_(u);
   });
@@ -160,5 +162,7 @@ function sha_(text) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text, Utilities.Charset.UTF_8)
     .map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
 }
+function str_(v, n) { return String(v == null ? '' : v).slice(0, n); }
+function int_(v) { v = Math.floor(Number(v)); return v > 0 && v < 1e7 ? v : ''; }
 function isoDate_(days) { return new Date(Date.now() + days * 864e5).toISOString().slice(0, 10); }
 function out_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }

@@ -26,7 +26,11 @@ Until a Google Sheet is connected the app runs in **demo mode**: sign in with `a
 
 After you edit `Code.gs` later, publish it with **Deploy → Manage deployments → Edit → Version: New version**.
 
-**Replace the default admin.** Register your own account from the sign-in page (with your invite code), then delete the `admin` row in the **Users** tab. To make yourself owner, set the `role` cell of your row to `owner`.
+**Replace the default admin.** Register your own account from the sign-in page → Register (it asks for your invite code), then delete the `admin` row in the **Users** tab. To make yourself owner, set the `role` cell of your row to `owner`.
+
+## Registration
+
+`register.html` walks a new user through choosing a service, a package (Buffet, A la carte, Full Options), add-on functions with monthly or yearly billing, and a sign-up form. It then creates the account with a 7-day trial and saves the package, price, table count, phone, email and address in the **Users** tab. There is no online payment and no SMS code step; the invite code is what stops strangers from registering.
 
 ## 2. Deploy with GitHub Pages
 
@@ -63,7 +67,8 @@ The app keeps a copy of the data in the browser, so screens respond instantly. C
 ## Files
 
 ```
-index.html            sign-in and registration
+index.html            sign-in
+register.html         registration: service → package → options → form → success
 app.html              the POS application
 menu.html             guest menu opened by a table's QR code
 assets/css/style.css  all styles, animations, dark mode, mobile layout
@@ -71,6 +76,8 @@ assets/js/config.js   settings
 assets/js/db.js       data layer (Google Sheets or demo storage)
 assets/js/i18n.js     logo and translations (ไทย, EN, 中文, 日本, ລາວ)
 assets/js/login.js    sign-in page
+assets/js/register.js registration flow; package names, prices and photos are at the top
+assets/css/register.css  registration styles
 assets/js/app.js      all POS screens
 apps-script/Code.gs   Google Sheets backend
 ```

@@ -71,21 +71,7 @@
         <div class="err" id="err"></div>
         <div class="note" id="demoNote" hidden>Demo mode — sign in with <b>admin</b> / <b>admin123</b>. Data stays in this browser until a Google Sheet is connected.</div>
         <button class="btn-main" id="btnLogin"><span data-i18n="signIn">Sign In</span><i data-lucide="arrow-right"></i></button>
-        <p class="alt"><span data-i18n="noAcc">Don't have an account?</span> <a data-go="reg" data-i18n="register">Register</a></p>
-      </form>
-
-      <form id="regForm" hidden autocomplete="off">
-        <div class="kicker" data-i18n="joinUs">Get started</div>
-        <h2 data-i18n="createAcc">Create account</h2>
-        <div class="field"><label for="rn" data-i18n="fullName">Full name</label><div class="inp"><i data-lucide="id-card"></i><input id="rn" required maxlength="80"></div></div>
-        <div class="field"><label for="rs" data-i18n="storeName">Store name</label><div class="inp"><i data-lucide="store"></i><input id="rs" required maxlength="80"></div></div>
-        <div class="field"><label for="ru" data-i18n="username">Username</label><div class="inp"><i data-lucide="user"></i><input id="ru" required pattern="[\w.\-]{3,30}" title="3–30 letters, numbers, dot, dash or underscore" autocomplete="username"></div></div>
-        <div class="field"><label for="rp" data-i18n="password">Password</label><div class="inp"><i data-lucide="lock"></i><input id="rp" type="password" required minlength="6" autocomplete="new-password">
-          <button class="eye" type="button" data-eye="rp" aria-label="Show password"><i data-lucide="eye"></i></button></div></div>
-        <div class="field" id="codeField"><label for="rc" data-i18n="invite">Invite code</label><div class="inp"><i data-lucide="key-round"></i><input id="rc"></div></div>
-        <div class="err" id="rerr"></div>
-        <button class="btn-main" id="btnReg"><span data-i18n="register">Register</span><i data-lucide="arrow-right"></i></button>
-        <p class="alt"><span data-i18n="haveAcc">Already have an account?</span> <a data-go="login" data-i18n="signIn">Sign In</a></p>
+        <p class="alt"><span data-i18n="noAcc">Don't have an account?</span> <a href="register.html" data-i18n="register">Register</a></p>
       </form>
     </div>
     <p class="copy">© <span id="yr"></span> <span data-brand></span>. <span data-i18n="rights">All rights reserved.</span></p>
