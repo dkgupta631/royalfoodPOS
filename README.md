@@ -4,7 +4,7 @@ A restaurant point-of-sale web app: sign-in, shifts, table POS, 3D floor view, g
 
 It is a static site (plain HTML, CSS and JavaScript, no build step). **Google Sheets is the database**, reached through a small Google Apps Script web app. Hosting is **GitHub Pages**.
 
-## Try it
+## Try it 
 
 Open `index.html` through any web server (for example `python3 -m http.server` and then http://localhost:8000).
 Until a Google Sheet is connected the app runs in **demo mode**: sign in with `admin` / `admin123`, and data stays in that browser only.
