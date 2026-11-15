@@ -25,7 +25,7 @@ svg.lucide{width:1.15em;height:1.15em;flex:none}
 .lang{position:relative}
 .lang-btn{display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);font-size:14px;font-weight:400;transition:.2s}
 .lang-btn:hover,.lang.open .lang-btn{border-color:var(--pri);background:rgba(59,139,246,.14)}
-.lang-btn svg:first-child{color:var(--pri)}
+.flag{width:22px;height:16px;border-radius:3px;object-fit:cover;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.18)}
 .lang-btn svg:last-child{font-size:13px;color:var(--muted);transition:transform .25s}
 .lang.open .lang-btn svg:last-child{transform:rotate(180deg)}
 .lang-menu{position:absolute;right:0;top:calc(100% + 8px);min-width:160px;background:#232635;border:1px solid var(--line);border-radius:14px;padding:6px;box-shadow:0 18px 40px rgba(0,0,0,.5);opacity:0;visibility:hidden;transform:translateY(-6px) scale(.97);transform-origin:top right;transition:.18s}

@@ -478,7 +478,7 @@
     $('[data-b]', m.el).onclick = backup; $('[data-o]', m.el).onclick = () => { m.close(); logout(); };
   };
   function langUi() {
-    $('#btnLang').textContent = I18N.cur.flag;
+    $('#btnLang').innerHTML = I18N.cur.flag;
     $('#langMenu').innerHTML = I18N.LANGS.map(l => `<button data-l="${l.code}" class="${l.code === I18N.lang ? 'on' : ''}">${l.flag} ${l.label}</button>`).join('');
   }
   $('#langMenu').onclick = e => { const b = e.target.closest('[data-l]'); if (b) { I18N.set(b.dataset.l); langUi(); render(); } };

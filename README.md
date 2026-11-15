@@ -64,7 +64,7 @@ The app keeps a copy of the data in the browser, so screens respond instantly. C
 - The Apps Script URL is public by design (the browser must reach it). Reading and writing data needs a sign-in token that lasts 6 hours; the QR menu and QR ordering endpoints are open so guests can order without an account.
 - Editing rows by hand in the sheet is fine. Keep the header row and the `id` column unchanged.
 - Google Sheets suits a single restaurant. Each save takes about a second, and very heavy traffic will hit Apps Script quotas.
-- Photos on the sign-in page are loaded from Unsplash; icons from Lucide; QR codes from qrcodejs.
+- Photos on the sign-in page are loaded from Unsplash; icons from Lucide; QR codes from qrcodejs; flag images from flag-icons (MIT), stored in `assets/img/flags/`.
 
 ## Files
 

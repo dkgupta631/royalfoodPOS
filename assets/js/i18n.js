@@ -3,9 +3,11 @@ const LOGO_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradi
 
 const I18N = (() => {
   const LANGS = [
-    { code: 'th', label: 'ไทย', flag: '🇹🇭' }, { code: 'km', label: 'ខ្មែរ', flag: '🇰🇭' }, { code: 'lo', label: 'ລາວ', flag: '🇱🇦' },
-    { code: 'zh', label: '中文', flag: '🇨🇳' }, { code: 'en', label: 'EN', flag: '🇺🇸' }
+    { code: 'th', label: 'ไทย', cc: 'th' }, { code: 'km', label: 'ខ្មែរ', cc: 'kh' }, { code: 'lo', label: 'ລາວ', cc: 'la' },
+    { code: 'zh', label: '中文', cc: 'cn' }, { code: 'en', label: 'EN', cc: 'us' }
   ];
+  /* image flags: emoji flags do not render on Windows */
+  LANGS.forEach(l => { l.flag = `<img class="flag" alt="" src="assets/img/flags/${l.cc}.svg">`; });
   const D = {
     en: {
       online: 'Online', tagline: 'Smart Restaurant Platform', live: 'LIVE', liveSales: 'Live sales',

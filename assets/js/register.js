@@ -40,8 +40,8 @@
   const go = h => { location.hash = '#' + h; };
   function toast(msg) { const el = document.createElement('div'); el.className = 'rg-toast'; el.textContent = msg; $('#toasts').appendChild(el); setTimeout(() => el.remove(), 3200); }
 
-  const langBox = () => `<div class="lang" id="lang"><button type="button" class="lang-btn" aria-haspopup="true" aria-label="${esc(T('langL'))}">${ic('globe')}<span>${esc(I18N.cur.label)}</span>${ic('chevron-down')}</button>
-    <div class="lang-menu">${I18N.LANGS.map(l => `<button type="button" data-l="${l.code}" class="${l.code === I18N.lang ? 'on' : ''}"><span>${l.flag}</span>${esc(l.label)}${l.code === I18N.lang ? ic('check') : ''}</button>`).join('')}</div></div>`;
+  const langBox = () => `<div class="lang" id="lang"><button type="button" class="lang-btn" aria-haspopup="true" aria-label="${esc(T('langL'))}">${I18N.cur.flag}<span>${esc(I18N.cur.label)}</span>${ic('chevron-down')}</button>
+    <div class="lang-menu">${I18N.LANGS.map(l => `<button type="button" data-l="${l.code}" class="${l.code === I18N.lang ? 'on' : ''}">${l.flag}${esc(l.label)}${l.code === I18N.lang ? ic('check') : ''}</button>`).join('')}</div></div>`;
   const backBar = to => `<header class="bar"><button class="back" data-go="${to}">${ic('chevron-left')} ${esc(T('back'))}</button><span class="sp"></span>${langBox()}</header>`;
   const V = {
     home: () => `<header class="bar"><span class="logo" data-logo></span><span><b>${esc(BRAND)}</b><small>Business Platform</small></span><span class="sp"></span>${langBox()}</header>

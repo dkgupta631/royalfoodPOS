@@ -25,8 +25,8 @@
   /* language */
   const lang = $('#lang');
   function drawLang() {
-    $('#langCur').textContent = I18N.cur.label;
-    $('#langMenu').innerHTML = I18N.LANGS.map(l => `<button type="button" data-l="${l.code}" class="${l.code === I18N.lang ? 'on' : ''}">${l.label}</button>`).join('');
+    $('#langCur').innerHTML = I18N.cur.flag + I18N.cur.label;
+    $('#langMenu').innerHTML = I18N.LANGS.map(l => `<button type="button" data-l="${l.code}" class="${l.code === I18N.lang ? 'on' : ''}">${l.flag}${l.label}</button>`).join('');
   }
   lang.addEventListener('click', e => {
     const b = e.target.closest('[data-l]');
