@@ -2,7 +2,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#202127;--bar:#14151c;--card:#1a1c27;--line:#2a2d3a;--text:#fff;--muted:#a3a8b8;--pri:#3b8bf6;--pri2:#0091f2;--soft:#1d2c4d;--ok:#2fbf71;--bad:#ff6b6b;--gold:#ff9f0a}
 html{-webkit-text-size-adjust:100%}
-body{font-family:'Kanit','Noto Sans Lao',system-ui,sans-serif;font-weight:300;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.5;-webkit-font-smoothing:antialiased}
+body{font-family:'Kanit','Noto Sans Lao','Noto Sans Khmer',system-ui,sans-serif;font-weight:300;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.5;-webkit-font-smoothing:antialiased}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 input{font:inherit;color:inherit}
 img{display:block;max-width:100%}

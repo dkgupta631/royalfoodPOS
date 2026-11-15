@@ -3,7 +3,7 @@
   --pri:#0a7cff;--pri-2:#2f6bf0;--pri-soft:#e3efff;--bg:#e8ecf9;--card:#fff;--text:#0f172a;--muted:#64748b;--line:#dde4f2;
   --side:#0a0c12;--side-2:#151821;--tile:#b9c5ea;--green:#1fa855;--red:#ef4444;--amber:#f59e0b;--soft:#f3f6fc;
   --shadow:0 8px 28px rgba(20,40,90,.08);--r:18px;
-  --font:'Noto Sans','Noto Sans Thai','Noto Sans Lao',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font:'Noto Sans','Noto Sans Thai','Noto Sans Lao','Noto Sans Khmer',system-ui,-apple-system,'Segoe UI',sans-serif;
 }
 [data-theme=dark]{--bg:#0d1220;--card:#161c2c;--text:#e8edf7;--muted:#93a0b8;--line:#263149;--tile:#33416b;--soft:#1c2438;--pri-soft:#16294a;--shadow:0 8px 28px rgba(0,0,0,.35)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}

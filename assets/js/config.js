@@ -7,9 +7,9 @@ window.APP_CONFIG = {
   COMPANY: 'ROYALFOOD POS',
   SUBTITLE: 'ระบบบริหารร้านอาหาร',
   API_URL: 'https://script.google.com/macros/s/AKfycbxNI02Vb8NvKgo_sQVLXGCLYMujqbu1gYxUWEshvwcKhnWMMVHiGZcO9DuwYW6CLrpvlQ/exec',
-  DEFAULT_LANG: 'th',   // th, en, zh, ja or lo
+  DEFAULT_LANG: 'th',   // th, km, lo, zh or en
   LANG_BY_IP: true,     // pick the language from the visitor's country until they choose one themselves
-  LANG_BY_COUNTRY: { TH: 'th', LA: 'lo', CN: 'zh', TW: 'zh', HK: 'zh', MO: 'zh', JP: 'ja',
+  LANG_BY_COUNTRY: { TH: 'th', KH: 'km', LA: 'lo', CN: 'zh', TW: 'zh', HK: 'zh', MO: 'zh',
     US: 'en', GB: 'en', AU: 'en', NZ: 'en', CA: 'en', IE: 'en', SG: 'en', IN: 'en', PH: 'en' }, // any other country gets DEFAULT_LANG
   CURRENCY: 'Baht',
   TAX_PERCENT: 0,

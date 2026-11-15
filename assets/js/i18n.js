@@ -3,8 +3,8 @@ const LOGO_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradi
 
 const I18N = (() => {
   const LANGS = [
-    { code: 'th', label: 'ไทย', flag: '🇹🇭' }, { code: 'en', label: 'EN', flag: '🇺🇸' },
-    { code: 'zh', label: '中文', flag: '🇨🇳' }, { code: 'ja', label: '日本', flag: '🇯🇵' }, { code: 'lo', label: 'ລາວ', flag: '🇱🇦' }
+    { code: 'th', label: 'ไทย', flag: '🇹🇭' }, { code: 'km', label: 'ខ្មែរ', flag: '🇰🇭' }, { code: 'lo', label: 'ລາວ', flag: '🇱🇦' },
+    { code: 'zh', label: '中文', flag: '🇨🇳' }, { code: 'en', label: 'EN', flag: '🇺🇸' }
   ];
   const D = {
     en: {
@@ -59,17 +59,17 @@ const I18N = (() => {
       detail: '详情', seats: '座位', netPrice: '应付金额', add: '添加', cancel: '取消', move: '换桌', status: '状态', invoice: '账单', checkout: '结账',
       items: '项目', price: '价格', number: '数量', total: '合计', save: '保存', delete: '删除', confirm: '确认', logout: '退出登录', settings: '设置'
     },
-    ja: {
-      online: 'オンライン', tagline: 'スマートレストランプラットフォーム', liveSales: 'リアルタイム売上', cloudDb: 'クラウドデータベース',
-      s1t: 'かんたん店舗管理', s1s: '飲食店のために設計された POS システム', s2t: 'Queue — オンライン順番待ち', s2s: 'スマホで順番予約、待ち時間を短縮し売上アップ',
-      s3t: 'リアルタイム売上レポート', s3s: 'いつでもどこでも売上を確認・分析', s4t: 'QR コード注文', s4s: 'お客様がスキャンして注文、キッチンへ即時反映',
-      welcome: 'おかえりなさい', signIn: 'サインイン', toUse: '{b} POS を利用', prev: '以前のログイン', login: 'ログイン', orOther: 'または別のアカウントでログイン',
-      username: 'ユーザー名', password: 'パスワード', phUser: 'ユーザー名を入力', phPass: 'パスワードを入力', noAcc: 'アカウントをお持ちでないですか？', register: '登録',
-      haveAcc: 'アカウントをお持ちですか？', createAcc: 'アカウント作成', joinUs: 'はじめる', fullName: '氏名', storeName: '店舗名', invite: '招待コード', enterPass: 'パスワードを入力', close: '閉じる', rights: '無断転載を禁じます。',
-      home: 'ホーム', pos: 'POS', pos3d: 'POS 3D', goods: '商品', tables: 'テーブルとゾーン', inventory: '在庫', member: '会員', logs: 'ログ',
-      openShift: 'シフト開始', initDrawer: '釣銭準備金', expDate: '有効期限', pkg: 'パッケージ', report: '問題を報告', table: 'テーブル', bill: '伝票', callQueue: '呼び出し', reserve: '予約',
-      detail: '詳細', seats: '席数', netPrice: '合計金額', add: '追加', cancel: 'キャンセル', move: '移動', status: 'ステータス', invoice: '請求書', checkout: '会計',
-      items: '品目', price: '価格', number: '数量', total: '合計', save: '保存', delete: '削除', confirm: '確認', logout: 'ログアウト', settings: '設定'
+    km: {
+      online: 'អនឡាញ', tagline: 'ប្រព័ន្ធភោជនីយដ្ឋានឆ្លាតវៃ', liveSales: 'ការលក់ផ្ទាល់', cloudDb: 'មូលដ្ឋានទិន្នន័យក្លោដ',
+      s1t: 'គ្រប់គ្រងភោជនីយដ្ឋានយ៉ាងងាយស្រួល', s1s: 'ប្រព័ន្ធ POS រចនាឡើងសម្រាប់ភោជនីយដ្ឋានជាពិសេស', s2t: 'Queue — ប្រព័ន្ធជួរអនឡាញ', s2s: 'កក់ជួរតាមទូរស័ព្ទ កាត់បន្ថយពេលរង់ចាំ និងបង្កើនការលក់',
+      s3t: 'របាយការណ៍លក់ផ្ទាល់', s3s: 'មើល និងវិភាគការលក់បានគ្រប់ពេល គ្រប់ទីកន្លែង', s4t: 'កុម្ម៉ង់តាម QR Code', s4s: 'ភ្ញៀវស្កេន កុម្ម៉ង់ ហើយផ្ទះបាយទទួលបានភ្លាមៗ',
+      welcome: 'សូមស្វាគមន៍ការត្រឡប់មកវិញ', signIn: 'ចូលប្រើ', toUse: 'ដើម្បីប្រើ {b} POS', prev: 'គណនីដែលធ្លាប់ចូល', login: 'ចូល', orOther: 'ឬចូលដោយគណនីផ្សេង',
+      username: 'ឈ្មោះអ្នកប្រើ', password: 'ពាក្យសម្ងាត់', phUser: 'បញ្ចូលឈ្មោះអ្នកប្រើ', phPass: 'បញ្ចូលពាក្យសម្ងាត់', noAcc: 'មិនទាន់មានគណនី?', register: 'ចុះឈ្មោះ',
+      haveAcc: 'មានគណនីរួចហើយ?', createAcc: 'បង្កើតគណនី', joinUs: 'ចាប់ផ្តើម', fullName: 'ឈ្មោះពេញ', storeName: 'ឈ្មោះហាង', invite: 'លេខកូដអញ្ជើញ', enterPass: 'បញ្ចូលពាក្យសម្ងាត់', close: 'បិទ', rights: 'រក្សាសិទ្ធិគ្រប់យ៉ាង។',
+      home: 'ទំព័រដើម', pos: 'POS', pos3d: 'POS 3D', goods: 'ទំនិញ', tables: 'តុ និងតំបន់', inventory: 'ស្តុក', member: 'សមាជិក', logs: 'កំណត់ហេតុ',
+      openShift: 'បើកវេន', initDrawer: 'ប្រាក់ដើមក្នុងថត', expDate: 'ថ្ងៃផុតកំណត់', pkg: 'កញ្ចប់', report: 'រាយការណ៍បញ្ហា', table: 'តុ', bill: 'វិក្កយបត្រ', callQueue: 'ហៅជួរ', reserve: 'កក់',
+      detail: 'លម្អិត', seats: 'កៅអី', netPrice: 'តម្លៃសុទ្ធ', add: 'បន្ថែម', cancel: 'បោះបង់', move: 'ផ្លាស់ទី', status: 'ស្ថានភាព', invoice: 'វិក្កយបត្រ', checkout: 'គិតលុយ',
+      items: 'មុខទំនិញ', price: 'តម្លៃ', number: 'ចំនួន', total: 'សរុប', save: 'រក្សាទុក', delete: 'លុប', confirm: 'បញ្ជាក់', logout: 'ចេញ', settings: 'ការកំណត់'
     },
     lo: {
       online: 'ອອນລາຍ', welcome: 'ຍິນດີຕ້ອນຮັບກັບມາ', signIn: 'ເຂົ້າສູ່ລະບົບ', login: 'ເຂົ້າສູ່ລະບົບ', username: 'ຊື່ຜູ້ໃຊ້', password: 'ລະຫັດຜ່ານ',

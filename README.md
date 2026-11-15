@@ -76,7 +76,7 @@ menu.html             guest menu opened by a table's QR code
 assets/css/style.css  all styles, animations, dark mode, mobile layout
 assets/js/config.js   settings
 assets/js/db.js       data layer (Google Sheets or demo storage)
-assets/js/i18n.js     logo and translations (ไทย, EN, 中文, 日本, ລາວ)
+assets/js/i18n.js     logo and translations (ไทย, ខ្មែរ, ລາວ, 中文, EN)
 assets/js/login.js    sign-in page
 assets/js/register.js registration flow; package prices and photos are at the top
 assets/js/register-i18n.js  registration texts in the five languages
