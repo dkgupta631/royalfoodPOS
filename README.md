@@ -42,6 +42,8 @@ After you edit `Code.gs` later, publish it with **Deploy → Manage deployments 
 
 All in [`assets/js/config.js`](assets/js/config.js): brand name, currency, tax percent, member points rate and the support contacts shown on the Home page.
 
+**Language.** Pages open in `DEFAULT_LANG` (Thai). On a visitor's first page the site looks up the country of their IP address (api.country.is, with Cloudflare's trace page as a fallback) and switches to the language `LANG_BY_COUNTRY` gives for it; countries not in that list keep the default. A language the visitor picks from the menu is remembered and always wins. Set `LANG_BY_IP: false` to turn the lookup off.
+
 ## How data is stored
 
 | Tab | Holds |
@@ -76,7 +78,8 @@ assets/js/config.js   settings
 assets/js/db.js       data layer (Google Sheets or demo storage)
 assets/js/i18n.js     logo and translations (ไทย, EN, 中文, 日本, ລາວ)
 assets/js/login.js    sign-in page
-assets/js/register.js registration flow; package names, prices and photos are at the top
+assets/js/register.js registration flow; package prices and photos are at the top
+assets/js/register-i18n.js  registration texts in the five languages
 assets/css/register.css  registration styles
 assets/js/app.js      all POS screens
 apps-script/Code.gs   Google Sheets backend

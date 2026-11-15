@@ -482,6 +482,7 @@
     $('#langMenu').innerHTML = I18N.LANGS.map(l => `<button data-l="${l.code}" class="${l.code === I18N.lang ? 'on' : ''}">${l.flag} ${l.label}</button>`).join('');
   }
   $('#langMenu').onclick = e => { const b = e.target.closest('[data-l]'); if (b) { I18N.set(b.dataset.l); langUi(); render(); } };
+  window.addEventListener('rf-lang', () => { langUi(); render(); });
   $('#userMenu').innerHTML = `<div class="mi"><b>${esc(U.name || U.username)}</b><small>${esc(U.username)} · ${esc(U.store || '')}</small></div><button data-out>${ic('log-out')} <span>${esc(t('logout'))}</span></button>`;
   $('#userMenu').onclick = e => { if (e.target.closest('[data-out]')) logout(); };
   function bell() {

@@ -77,9 +77,30 @@ const I18N = (() => {
       cancel: 'ຍົກເລີກ', price: 'ລາຄາ', total: 'ລວມ', save: 'ບັນທຶກ', delete: 'ລຶບ', confirm: 'ຢືນຢັນ', logout: 'ອອກຈາກລະບົບ'
     }
   };
-  let lang = 'en';
-  try { lang = localStorage.getItem('rf_lang') || 'en'; } catch (e) {}
-  if (!D[lang]) lang = 'en';
+  /* Language: the visitor's own choice wins; otherwise the country of their IP address; otherwise DEFAULT_LANG. */
+  const CFG = window.APP_CONFIG || {}, DEF = D[CFG.DEFAULT_LANG] ? CFG.DEFAULT_LANG : 'th';
+  let lang = DEF, manual = false, auto = false;
+  try {
+    const s = localStorage.getItem('rf_lang'), a = sessionStorage.getItem('rf_lang_auto');
+    if (D[s]) { lang = s; manual = true; } else if (D[a]) { lang = a; auto = true; }
+  } catch (e) {}
+  async function country() {
+    const get = async (url, pick) => {
+      const c = new AbortController(), tm = setTimeout(() => c.abort(), 4000);
+      try { return pick(await (await fetch(url, { signal: c.signal, cache: 'no-store' })).text()); } finally { clearTimeout(tm); }
+    };
+    try { return await get('https://api.country.is/', x => JSON.parse(x).country); }
+    catch (e) { return get('https://www.cloudflare.com/cdn-cgi/trace', x => (x.match(/^loc=(\w\w)/m) || [])[1]); }
+  }
+  function detect() {
+    if (manual || auto || CFG.LANG_BY_IP === false) return;
+    country().then(c => {
+      const l = (CFG.LANG_BY_COUNTRY || {})[String(c || '').toUpperCase()] || DEF;
+      if (!D[l] || manual) return;
+      try { sessionStorage.setItem('rf_lang_auto', l); } catch (e) {}
+      if (l !== lang) { lang = l; apply(); window.dispatchEvent(new Event('rf-lang')); }
+    }).catch(() => {});
+  }
   const brand = () => (window.APP_CONFIG || {}).BRAND || 'Royalfood';
   const t = k => ((D[lang] && D[lang][k]) || D.en[k] || k).replace('{b}', brand());
   function apply(root = document) {
@@ -89,7 +110,8 @@ const I18N = (() => {
     root.querySelectorAll('[data-logo]').forEach(el => { if (!el.firstChild) el.innerHTML = LOGO_SVG; });
     root.querySelectorAll('[data-brand]').forEach(el => { el.textContent = brand(); });
   }
-  function set(l) { if (!D[l]) return; lang = l; try { localStorage.setItem('rf_lang', l); } catch (e) {} apply(); }
+  function set(l) { if (!D[l]) return; lang = l; manual = true; try { localStorage.setItem('rf_lang', l); } catch (e) {} apply(); }
+  detect();
   return { t, apply, set, LANGS, get lang() { return lang; }, get cur() { return LANGS.find(x => x.code === lang); } };
 })();
 const t = I18N.t;

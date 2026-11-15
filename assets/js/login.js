@@ -82,5 +82,6 @@
     if (eye) { const i = document.getElementById(eye.dataset.eye), sh = i.type === 'password'; i.type = sh ? 'text' : 'password'; eye.innerHTML = `<i data-lucide="${sh ? 'eye-off' : 'eye'}"></i>`; icons(); }
   });
 
+  window.addEventListener('rf-lang', () => { drawLang(); show(cur); });
   I18N.apply(); drawLang(); drawRecent(); show(0); icons();
 })();
