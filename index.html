@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1730">
+<title>Royalfood POS — Sign In</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%232f7df0'/%3E%3Cpath d='M15 42 12 22l11 9 9-15 9 15 11-9-3 20Z' fill='%23fff'/%3E%3Crect x='16' y='45' width='32' height='4.5' rx='2.2' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;600;700;800&family=Noto+Sans+Lao:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="login">
+  <section class="hero">
+    <div class="hero-grid"></div>
+    <header class="hero-top">
+      <div class="brand"><span class="logo" data-logo></span><span data-brand></span></div>
+      <span class="pill-online"><i></i><span data-i18n="online">Online</span></span>
+    </header>
+    <span class="pill-tag"><i data-lucide="sparkle"></i><span data-i18n="tagline">Smart Restaurant Platform</span></span>
+    <div class="hero-text" id="heroText"><h1 id="heroTitle"></h1><p id="heroSub"></p></div>
+    <div class="browser">
+      <div class="browser-bar">
+        <span class="dots"><i></i><i></i><i></i></span>
+        <span class="url"><i data-lucide="lock"></i><span id="domain"></span></span>
+        <span class="live"><i></i><span data-i18n="live">LIVE</span></span>
+      </div>
+      <div class="shot" id="shot">
+        <img alt="" src="https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=1200&q=70">
+        <img alt="" src="https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=1200&q=70">
+        <img alt="" src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200&q=70">
+        <img alt="" src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&q=70">
+        <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+      </div>
+      <div class="float sales">
+        <span class="fi"><i data-lucide="trending-up"></i></span><b data-i18n="liveSales">Live sales</b>
+        <svg class="spark" viewBox="0 0 150 44" fill="none"><path d="M2 38 L22 32 L38 35 L56 24 L74 28 L94 18 L112 21 L148 6" stroke="#38a8ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="float secure">
+        <span class="fi"><i data-lucide="database"></i></span>
+        <span><b data-i18n="cloudDb">Cloud database</b><small data-i18n="cloudDbSub">Google Sheets</small></span>
+      </div>
+    </div>
+    <div class="bars" id="bars"></div>
+  </section>
+
+  <section class="panel">
+    <div class="lang" id="lang">
+      <button class="lang-btn" type="button" aria-haspopup="true"><i data-lucide="globe"></i><span id="langCur">EN</span><i data-lucide="chevron-down" class="chev"></i></button>
+      <div class="menu" id="langMenu"></div>
+    </div>
+
+    <div class="auth-card" id="card">
+      <span class="logo auth-logo" data-logo></span>
+
+      <form id="loginForm" autocomplete="on">
+        <div class="kicker" data-i18n="welcome">Welcome back</div>
+        <h2 data-i18n="signIn">Sign In</h2>
+        <p class="sub" data-i18n="toUse">to use Royalfood POS</p>
+        <div id="recentWrap" hidden>
+          <div class="cap" data-i18n="prev">Previously logged in</div>
+          <div id="recent"></div>
+          <div class="or"><span data-i18n="orOther">or login with another account</span></div>
+        </div>
+        <div class="field"><label for="u" data-i18n="username">Username</label>
+          <div class="inp"><i data-lucide="user"></i><input id="u" name="username" required autocomplete="username" data-i18n-ph="phUser"></div></div>
+        <div class="field"><label for="p" data-i18n="password">Password</label>
+          <div class="inp"><i data-lucide="lock"></i><input id="p" name="password" type="password" required autocomplete="current-password" data-i18n-ph="phPass">
+            <button class="eye" type="button" data-eye="p" aria-label="Show password"><i data-lucide="eye"></i></button></div></div>
+        <div class="err" id="err"></div>
+        <div class="note" id="demoNote" hidden>Demo mode — sign in with <b>admin</b> / <b>admin123</b>. Data stays in this browser until a Google Sheet is connected.</div>
+        <button class="btn-main" id="btnLogin"><span data-i18n="signIn">Sign In</span><i data-lucide="arrow-right"></i></button>
+        <p class="alt"><span data-i18n="noAcc">Don't have an account?</span> <a data-go="reg" data-i18n="register">Register</a></p>
+      </form>
+
+      <form id="regForm" hidden autocomplete="off">
+        <div class="kicker" data-i18n="joinUs">Get started</div>
+        <h2 data-i18n="createAcc">Create account</h2>
+        <div class="field"><label for="rn" data-i18n="fullName">Full name</label><div class="inp"><i data-lucide="id-card"></i><input id="rn" required maxlength="80"></div></div>
+        <div class="field"><label for="rs" data-i18n="storeName">Store name</label><div class="inp"><i data-lucide="store"></i><input id="rs" required maxlength="80"></div></div>
+        <div class="field"><label for="ru" data-i18n="username">Username</label><div class="inp"><i data-lucide="user"></i><input id="ru" required pattern="[\w.\-]{3,30}" title="3–30 letters, numbers, dot, dash or underscore" autocomplete="username"></div></div>
+        <div class="field"><label for="rp" data-i18n="password">Password</label><div class="inp"><i data-lucide="lock"></i><input id="rp" type="password" required minlength="6" autocomplete="new-password">
+          <button class="eye" type="button" data-eye="rp" aria-label="Show password"><i data-lucide="eye"></i></button></div></div>
+        <div class="field" id="codeField"><label for="rc" data-i18n="invite">Invite code</label><div class="inp"><i data-lucide="key-round"></i><input id="rc"></div></div>
+        <div class="err" id="rerr"></div>
+        <button class="btn-main" id="btnReg"><span data-i18n="register">Register</span><i data-lucide="arrow-right"></i></button>
+        <p class="alt"><span data-i18n="haveAcc">Already have an account?</span> <a data-go="login" data-i18n="signIn">Sign In</a></p>
+      </form>
+    </div>
+    <p class="copy">© <span id="yr"></span> <span data-brand></span>. <span data-i18n="rights">All rights reserved.</span></p>
+  </section>
+</div>
+
+<div class="splash" id="splash">
+  <div class="ring"><span class="logo" data-logo></span></div>
+  <h3 data-brand></h3><p id="splashSub"></p><div class="loadbar"></div>
+  <footer id="company"></footer>
+</div>
+<div class="toasts" id="toasts"></div>
+
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script charset="utf-8" src="assets/js/config.js"></script>
+<script charset="utf-8" src="assets/js/i18n.js"></script>
+<script charset="utf-8" src="assets/js/db.js"></script>
+<script charset="utf-8" src="assets/js/login.js"></script>
+</body>
+</html>

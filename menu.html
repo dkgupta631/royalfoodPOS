@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a7cff">
+<title>Menu — Royalfood</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700;800&family=Noto+Sans+Thai:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="cm">
+  <div class="cm-head"><span class="logo" data-logo></span><span><b data-brand></b><small id="tname">…</small></span></div>
+  <div class="chips" id="cats" style="margin-bottom:14px"></div>
+  <div class="pgrid" id="grid"><div class="empty">Loading menu…</div></div>
+</div>
+<div class="cm-foot"><button class="btn-main" id="send" disabled><span id="sum">Choose your dishes</span></button></div>
+<div class="toasts" id="toasts"></div>
+<script charset="utf-8" src="assets/js/config.js"></script>
+<script charset="utf-8" src="assets/js/i18n.js"></script>
+<script charset="utf-8" src="assets/js/db.js"></script>
+<script>
+(async () => {
+  const CFG = APP_CONFIG, $ = s => document.querySelector(s), num = DB.num;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const COLORS = ['#0a7cff', '#1fa855', '#f59e0b', '#ef5350', '#8b5cf6', '#0ea5a4', '#ec4899', '#64748b'];
+  const color = s => COLORS[[...String(s)].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
+  const tableId = new URLSearchParams(location.search).get('table'), cart = {};
+  let menu, cat = 'all';
+  I18N.apply();
+  function say(msg, type = 'ok') { const el = document.createElement('div'); el.className = 'toast ' + type; el.textContent = msg; $('#toasts').appendChild(el); setTimeout(() => el.remove(), 3000); }
+  function draw() {
+    $('#cats').innerHTML = [{ id: 'all', name: 'All' }].concat(menu.categories).map(c => `<button class="chip ${c.id === cat ? 'on' : ''}" data-cat="${esc(c.id)}">${esc(c.name)}</button>`).join('');
+    $('#grid').innerHTML = menu.products.filter(p => cat === 'all' || p.categoryId === cat).map(p => `<button class="pcard" data-pid="${esc(p.id)}"><span class="av" style="background:${color(p.name)}">${esc(p.name[0] || '?')}</span><b>${esc(p.name)}</b>
+      <span class="pr">${num(p.price).toLocaleString('en-US')} ${esc(CFG.CURRENCY)}</span>${cart[p.id] ? `<span class="cnt">${cart[p.id]}</span><span class="ops"><span class="btn ghost sm" data-minus="${esc(p.id)}">−</span></span>` : ''}</button>`).join('') || '<div class="empty">No dishes yet</div>';
+    $('#grid').classList.add('still');
+    const n = Object.values(cart).reduce((a, b) => a + b, 0), total = Object.entries(cart).reduce((a, [id, q]) => a + num((menu.products.find(p => p.id === id) || {}).price) * q, 0);
+    $('#send').disabled = !n; $('#sum').textContent = n ? `Send order · ${n} items · ${total.toLocaleString('en-US')} ${CFG.CURRENCY}` : 'Choose your dishes';
+  }
+  document.addEventListener('click', async e => {
+    const c = e.target.closest('[data-cat]'), mi = e.target.closest('[data-minus]'), p = e.target.closest('[data-pid]');
+    if (c) { cat = c.dataset.cat; $('#grid').classList.remove('still'); draw(); }
+    else if (mi) { if (--cart[mi.dataset.minus] <= 0) delete cart[mi.dataset.minus]; draw(); }
+    else if (p) { cart[p.dataset.pid] = Math.min(99, (cart[p.dataset.pid] || 0) + 1); draw(); }
+    else if (e.target.closest('#send')) {
+      const btn = $('#send'); btn.disabled = true; $('#sum').textContent = 'Sending…';
+      try { await DB.publicOrder(tableId, Object.entries(cart).map(([pid, qty]) => ({ pid, qty }))); Object.keys(cart).forEach(k => delete cart[k]); say('Order sent to the kitchen. Thank you!'); }
+      catch (err) { say('Could not send the order. Please call staff.', 'bad'); }
+      draw();
+    }
+  });
+  try { menu = await DB.publicMenu(tableId); $('#tname').textContent = 'Table ' + menu.table; draw(); }
+  catch (err) { $('#tname').textContent = ''; $('#grid').innerHTML = '<div class="empty">This table link is not valid. Please ask staff for help.</div>'; }
+})();
+</script>
+</body>
+</html>

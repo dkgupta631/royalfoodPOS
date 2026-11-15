@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0c12">
+<title>Royalfood POS</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%232f7df0'/%3E%3Cpath d='M15 42 12 22l11 9 9-15 9 15 11-9-3 20Z' fill='%23fff'/%3E%3Crect x='16' y='45' width='32' height='4.5' rx='2.2' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;600;700;800&family=Noto+Sans+Lao:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('rf_theme')||'light'}catch(e){}</script>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="side">
+    <div class="side-brand"><span class="logo" data-logo></span><span data-brand></span></div>
+    <nav class="nav" id="nav"></nav>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+  <div class="main">
+    <header class="top">
+      <button class="tb" id="btnMenu" aria-label="Menu"><i data-lucide="indent-decrease"></i></button>
+      <h1 id="title"></h1><span class="sp"></span>
+      <button class="tb" id="btnTheme" aria-label="Theme" title="Light / dark"><i data-lucide="sun"></i></button>
+      <button class="tb hide-m" id="btnHelp" aria-label="Manual" title="Manual"><i data-lucide="book-text"></i></button>
+      <button class="tb sync" id="btnSync" aria-label="Sync" title="Sync data"><i data-lucide="refresh-cw"></i></button>
+      <button class="tb hide-m" id="btnFull" aria-label="Fullscreen" title="Fullscreen"><i data-lucide="maximize"></i></button>
+      <div class="dd"><button class="tb" data-dd aria-label="Language" id="btnLang">🇺🇸</button><div class="menu" id="langMenu"></div></div>
+      <div class="dd"><button class="tb" data-dd aria-label="Notifications"><i data-lucide="bell"></i><span class="badge" id="bellBadge" hidden></span></button><div class="menu" id="bellMenu"></div></div>
+      <button class="tb hide-m" id="btnHist" aria-label="History" title="History"><i data-lucide="history"></i></button>
+      <div class="dd"><button class="tb ava" data-dd aria-label="Account"><span class="logo" data-logo></span></button><div class="menu" id="userMenu"></div></div>
+      <button class="tb" id="btnSet" aria-label="Settings" title="Settings"><i data-lucide="settings"></i></button>
+    </header>
+    <main class="view" id="view"></main>
+  </div>
+</div>
+
+<div class="splash show" id="splash">
+  <div class="ring"><span class="logo" data-logo></span></div>
+  <h3 data-brand></h3><p id="splashSub"></p><div class="loadbar"></div>
+  <footer id="company"></footer>
+</div>
+<div class="toasts" id="toasts"></div>
+<div id="print"></div>
+
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script charset="utf-8" src="assets/js/config.js"></script>
+<script charset="utf-8" src="assets/js/i18n.js"></script>
+<script charset="utf-8" src="assets/js/db.js"></script>
+<script charset="utf-8" src="assets/js/app.js"></script>
+</body>
+</html>
