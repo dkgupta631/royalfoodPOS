@@ -115,21 +115,64 @@
   /* ================= VIEWS ================= */
   const V = {};
 
+  /* Number pad popup for cash amounts (opening and closing a shift). */
+  function keypad(title, start, checkLabel, onOk) {
+    let val = start ? String(start) : '';
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'back', 'C'];
+    const m = modal(`<h3 class="kp-ttl">${esc(title)}</h3>
+      <div class="kp-amt"><small>Amount</small><b data-amt>0</b></div>
+      <div class="kp-keys">${keys.map(k => `<button type="button" class="kp-k ${k === 'C' ? 'clr' : ''}" data-k="${k}" ${k === 'back' ? 'aria-label="Delete"' : ''}>${k === 'back' ? ic('delete') : k}</button>`).join('')}</div>
+      <label class="kp-chk"><input type="checkbox" data-pr><span>${esc(checkLabel)}</span></label>
+      <div class="kp-act"><button type="button" class="btn ghost danger" data-close>${esc(t('close'))}</button><button type="button" class="btn" data-ok>${esc(t('confirm'))}</button></div>`, 'kp');
+    const show = () => { $('[data-amt]', m.el).textContent = val === '' ? '0' : val.replace(/\B(?=(\d{3})+(?!\d))/g, (x, a, off, str) => (str.indexOf('.') >= 0 && off > str.indexOf('.') ? '' : ',')); };
+    const press = k => {
+      if (k === 'C') val = '';
+      else if (k === 'back') val = val.slice(0, -1);
+      else if (k === '.') { if (!val.includes('.')) val = (val || '0') + '.'; }
+      else if (val.replace('.', '').length < 10 && !/\.\d\d$/.test(val)) val = val === '0' ? k : val + k;
+      show();
+    };
+    const done = () => { m.close(); document.removeEventListener('keydown', onKey); onOk(num(val), $('[data-pr]', m.el).checked); };
+    const onKey = e => {
+      if (!document.body.contains(m.el)) { document.removeEventListener('keydown', onKey); return; }
+      if (/^[0-9.]$/.test(e.key)) press(e.key); else if (e.key === 'Backspace') press('back'); else if (e.key === 'Enter') { e.preventDefault(); done(); }
+    };
+    document.addEventListener('keydown', onKey);
+    m.el.addEventListener('click', e => { const k = e.target.closest('[data-k]'); if (k) press(k.dataset.k); else if (e.target.closest('[data-ok]')) done(); });
+    show();
+  }
+  /* Slip printed when a shift is opened or closed. */
+  function shiftSlip(sh, kind, x = {}) {
+    const no = DB.list('Shifts').indexOf(sh) + 1, at = new Date(kind === 'open' ? sh.openedAt : sh.closedAt), who = esc(U.name || U.username);
+    const row = (l, v) => `<tr><td>${l}</td><td class="r">${v}</td></tr>`, f2 = v => num(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    printHtml(`<div class="tk"><div class="c"><b>${esc(U.store || CFG.BRAND)}</b></div><hr><h3>${kind === 'open' ? 'Open Shift' : 'Close Shift'}</h3><hr>
+      <table>${row('Terminal', esc(U.store || CFG.BRAND))}${row('Shift No.', no)}${row('Cashier', who)}${row('Manager', '')}${row('Sale Date', `${p2(at.getDate())}/${p2(at.getMonth() + 1)}/${at.getFullYear()}`)}${row(kind === 'open' ? 'Clock In' : 'Clock Out', `${p2(at.getHours())}:${p2(at.getMinutes())}`)}</table><hr>
+      <table>${row('Initial Cash', f2(sh.openingCash))}${kind === 'open' ? row('Total Adjust', f2(sh.openingCash))
+        : row('Sales', f2(x.sales)) + row('Bills paid', x.count) + row('Cash sales', f2(x.cash)) + row('Expenses', f2(sh.expenses)) + row('Expected cash', f2(sh.expectedCash)) + row('Counted cash', f2(sh.closingCash)) + row('Difference', f2(num(sh.closingCash) - num(sh.expectedCash)))}</table><hr>
+      <div class="c sg1">Cashier</div><div class="sgl"></div><div class="c">(${who})</div><div class="c sg1">Manager</div><div class="sgl"></div><div class="c sg1">${fmtDT(at)}</div></div>`);
+  }
+
   V.dashboard = root => {
     const sh = openShift(), exp = new Date(U.expireDate), days = Math.round((exp - Date.now()) / 864e5);
     const rel = isNaN(exp) ? '' : days < 0 ? 'expired' : days < 14 ? `${days} days from now` : days < 60 ? `${Math.round(days / 7)} weeks from now` : `${Math.round(days / 30)} months from now`;
     const expTxt = isNaN(exp) ? '-' : exp.toLocaleDateString({ th: 'th-TH', km: 'km-KH', lo: 'lo-LA', zh: 'zh-CN' }[I18N.lang] || 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
     const bills = sh ? DB.list('Bills').filter(b => b.shiftId === sh.id && b.status === 'closed') : [];
-    const sales = bills.reduce((a, b) => a + num(b.total), 0), openT = DB.list('Bills').filter(b => b.status === 'open').length;
+    const sales = bills.reduce((a, b) => a + num(b.total), 0), open = DB.list('Bills').filter(b => b.status === 'open'), unpaid = open.reduce((a, b) => a + num(b.total), 0);
+    const cash = bills.filter(b => b.payMethod === 'Cash').reduce((a, b) => a + num(b.total), 0), spent = sh ? num(sh.expenses) : 0, balance = sh ? num(sh.openingCash) + cash - spent : 0;
     const sp = CFG.SUPPORT;
+    const stat = (c, icon, label, val, extra = '') => `<div class="dstat" style="--c:${c}"><div class="dh"><span class="ib">${ic(icon)}</span><small>${label}</small></div><b>${val}</b>${extra}</div>`;
+    const cnt = (v, dec) => `<span data-count="${v}" ${dec ? 'data-dec' : ''}>0</span>`;
     root.innerHTML = `
     <div class="head"><h2>${esc(U.store || CFG.BRAND)}</h2><span class="sp"></span><a class="btn" href="#/pos">${ic('shopping-cart')} ${esc(t('pos'))}</a></div>
     <div class="dash">
-      ${sh ? `<div class="card shift open">
-          <div class="head" style="margin:0"><span class="tag g">${esc(t('shiftOpen'))}</span><span class="sp"></span><button class="btn red sm" data-act="closeShift">${ic('lock')} ${esc(t('closeShift'))}</button></div>
-          <p style="margin-top:10px">Since ${fmtDT(sh.openedAt)} · ${esc(sh.user)} · ${esc(t('initDrawer'))} ${money(sh.openingCash)} ${esc(CFG.CURRENCY)}</p>
-          <div class="stats"><div class="stat"><small>Sales</small><b data-count="${sales}">0</b></div><div class="stat"><small>Bills paid</small><b data-count="${bills.length}">0</b></div><div class="stat"><small>Open tables</small><b data-count="${openT}">0</b></div></div>
-        </div>`
+      ${sh ? `<div class="dleft">
+          <div class="card cashier"><span class="pm-ic">${ic('user-round')}</span><span class="grow"><b>${esc(U.name || U.username)}</b><span class="since">${ic('clock')} ${fmtT(sh.openedAt)}</span></span>
+            <button class="btn ghost" data-act="profile">${ic('user-round')} Profile</button><button class="btn red" data-act="closeShift">${ic('lock')} ${esc(t('closeShift'))}</button></div>
+          <div class="dstats">
+            ${stat('#0a7cff', 'credit-card', esc(t('initDrawer')), cnt(num(sh.openingCash)))}${stat('#06b6d4', 'clock', 'Open shift time', fmtT(sh.openedAt), `<em>${fmtDT(sh.openedAt)}</em>`)}
+            ${stat('#f43f5e', 'trending-up', 'Expenses', cnt(spent, 1), `<button class="btn-soft" data-act="expense">${ic('plus')} Add expense</button>`)}${stat('#f59e0b', 'dollar-sign', 'Balance in the drawer', cnt(balance, 1))}
+            ${stat('#3b82f6', 'file-text', 'Number of orders / total', `${cnt(bills.length)} <i>/</i> ${cnt(sales, 1)}`)}${stat('#14b8a6', 'circle-check-big', 'Order/unpaid price', `${cnt(open.length)} <i>/</i> ${cnt(unpaid, 1)}`)}
+          </div></div>`
       : `<div class="card shift" data-act="openShift" role="button" tabindex="0"><span class="big">${ic('credit-card')}</span><h3>${esc(t('openShift'))}</h3><p>${esc(t('initDrawer'))}</p><span class="dot"></span></div>`}
       <div class="rcol">
         <div class="card info hl"><span class="ib o">${ic('calendar')}</span><span class="grow"><small>${esc(t('expDate'))}</small><b>${esc(expTxt)}</b><em>${esc(rel)}</em></span>${ic('chevron-right')}</div>
@@ -142,22 +185,26 @@
       </div>
     </div>`;
     acts = {
-      openShift: () => formModal(t('openShift'), [{ k: 'cash', label: `${t('initDrawer')} (${CFG.CURRENCY})`, type: 'number', req: 1 }], { cash: 0 }, o => {
-        DB.save('Shifts', { status: 'open', openedAt: new Date().toISOString(), closedAt: '', openingCash: num(o.cash), closingCash: '', expectedCash: '', user: U.username });
-        DB.log('Open shift', `Drawer ${money(o.cash)}`); toast('Shift opened'); render(true);
+      openShift: () => keypad('Money in drawer', 0, 'Print open-shift receipt', (amt, print) => {
+        const row = DB.save('Shifts', { status: 'open', openedAt: new Date().toISOString(), closedAt: '', openingCash: amt, closingCash: '', expectedCash: '', user: U.username, expenses: 0 });
+        DB.log('Open shift', `Drawer ${money(amt)}`); toast('Shift opened'); render(true);
+        if (print) shiftSlip(row, 'open');
       }),
-      closeShift: () => {
-        const cash = bills.filter(b => b.payMethod === 'Cash').reduce((a, b) => a + num(b.total), 0), expected = num(sh.openingCash) + cash;
-        formModal(`${t('closeShift')} — expected cash ${money(expected)}`, [{ k: 'cash', label: `Counted cash (${CFG.CURRENCY})`, type: 'number', req: 1 }], { cash: expected }, o => {
-          Object.assign(sh, { status: 'closed', closedAt: new Date().toISOString(), closingCash: num(o.cash), expectedCash: expected }); DB.save('Shifts', sh);
-          DB.log('Close shift', `Sales ${money(sales)}, counted ${money(o.cash)}, expected ${money(expected)}`); toast('Shift closed'); render(true);
-        });
-      },
+      closeShift: () => keypad(`${t('closeShift')} — expected cash ${money(balance)}`, balance, 'Print close-shift receipt', (amt, print) => {
+        Object.assign(sh, { status: 'closed', closedAt: new Date().toISOString(), closingCash: amt, expectedCash: balance }); DB.save('Shifts', sh);
+        DB.log('Close shift', `Sales ${money(sales)}, counted ${money(amt)}, expected ${money(balance)}`); toast('Shift closed'); render(true);
+        if (print) shiftSlip(sh, 'close', { sales, cash, count: bills.length });
+      }),
+      expense: () => formModal('Add expense', [{ k: 'amt', label: `Amount (${CFG.CURRENCY})`, type: 'number', req: 1 }, { k: 'note', label: 'Note', req: 1 }], {}, o => {
+        if (num(o.amt) <= 0) return false;
+        sh.expenses = num(sh.expenses) + num(o.amt); DB.save('Shifts', sh); DB.log('Expense', `${o.note.trim()} ${money(o.amt)}`); toast('Saved'); render();
+      }),
+      profile: () => profileModal(),
       backup: backup
     };
     $$('[data-count]', root).forEach(el => {
-      const to = num(el.dataset.count), t0 = performance.now();
-      const step = now => { const k = Math.min(1, (now - t0) / 700); el.textContent = money(Math.round(to * (1 - Math.pow(1 - k, 3)))); if (k < 1) requestAnimationFrame(step); else el.textContent = money(to); };
+      const to = num(el.dataset.count), dec = el.hasAttribute('data-dec'), t0 = performance.now(), fmt = v => dec ? num(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : money(v);
+      const step = now => { const k = Math.max(0, Math.min(1, (now - t0) / 700)); el.textContent = fmt(dec ? to * (1 - Math.pow(1 - k, 3)) : Math.round(to * (1 - Math.pow(1 - k, 3)))); if (k < 1) requestAnimationFrame(step); else el.textContent = fmt(to); };
       requestAnimationFrame(step);
     });
   };
@@ -215,7 +262,7 @@
           <button class="ab green" data-act="checkout" ${its.length ? '' : 'disabled'}>${ic('printer')}${esc(t('checkout'))}</button>
         </div>
         <div class="tw"><table class="t items"><thead><tr><th><input type="checkbox" data-all aria-label="Select all"></th><th>${esc(t('items'))}</th><th class="r">${esc(t('price'))}</th><th>${esc(t('number'))}</th><th class="r">${esc(t('total'))}</th><th>${esc(t('status'))}</th><th>#</th></tr></thead>
-          <tbody>${its.map((i, k) => `<tr><td><input type="checkbox" data-chk="${k}" aria-label="Select"></td><td>${esc(i.name)} ${i.src === 'qr' ? '<span class="tag a">QR</span>' : ''}</td><td class="r">${money(i.price)}</td>
+          <tbody>${its.map((i, k) => `<tr><td><input type="checkbox" data-chk="${k}" aria-label="Select"></td><td>${esc(i.name)} ${i.src === 'qr' ? '<span class="tag a">QR</span>' : ''}${i.note ? `<small class="inote">${esc(i.note)}</small>` : ''}</td><td class="r">${money(i.price)}</td>
             <td><span class="qty"><button data-act="dec" data-id="${k}" aria-label="Less">${ic('minus')}</button><b>${num(i.qty)}</b><button data-act="inc" data-id="${k}" aria-label="More">${ic('plus')}</button></span></td>
             <td class="r"><b>${money(num(i.price) * num(i.qty))}</b></td><td><span class="tag ${i.status === 'served' ? 'g' : 'a'}">${esc(i.status || 'ordered')}</span></td>
             <td><button class="icb del" data-act="del" data-id="${k}" aria-label="Remove">${ic('trash-2')}</button></td></tr>`).join('')}</tbody></table>${its.length ? '' : '<div class="empty" style="padding:26px"></div>'}</div>

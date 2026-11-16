@@ -22,7 +22,7 @@ const SCHEMA = {
   Members: ['id', 'name', 'phone', 'points', 'createdAt', 'username', 'passwordHash', 'code', 'typeId', 'totalPoints', 'birthday', 'email', 'lineUid', 'note'],
   MemberTypes: ['id', 'name'],
   Points: ['id', 'memberId', 'time', 'points', 'kind', 'billId', 'note', 'user'], // every change to a member's points
-  Shifts: ['id', 'status', 'openedAt', 'closedAt', 'openingCash', 'closingCash', 'expectedCash', 'user'],
+  Shifts: ['id', 'status', 'openedAt', 'closedAt', 'openingCash', 'closingCash', 'expectedCash', 'user', 'expenses'],
   Logs: ['id', 'time', 'user', 'action', 'detail'],
   Queue: ['id', 'number', 'name', 'people', 'status', 'createdAt'],
   Reservations: ['id', 'name', 'phone', 'tableId', 'time', 'people', 'status']
@@ -178,7 +178,7 @@ function order_(b) {
   var items = JSON.parse(bill.items || '[]');
   cart.forEach(function (c) {
     var p = prods.filter(function (x) { return x.id === c.pid && x.active !== 'false'; })[0], q = Math.floor(Number(c.qty));
-    if (p && q > 0 && q <= 99) items.push({ pid: p.id, name: p.name, price: Number(p.price) || 0, qty: q, status: 'ordered', src: 'qr' });
+    if (p && q > 0 && q <= 99) items.push({ pid: p.id, name: p.name, price: Number(p.price) || 0, qty: q, status: 'ordered', src: 'qr', note: str_(c.note, 80) });
   });
   var sub = items.reduce(function (a, i) { return a + i.price * i.qty; }, 0);
   bill.items = JSON.stringify(items); bill.subtotal = sub; bill.total = sub - (Number(bill.discount) || 0) + (Number(bill.tax) || 0);

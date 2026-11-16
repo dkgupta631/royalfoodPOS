@@ -256,7 +256,7 @@ const DB = (() => {
     qrOk(tb, key);
     const b = openBill(tableId) || newBill(tb, tb.seats, 'QR');
     const its = items(b);
-    cart.forEach(c => { const p = get('Products', c.pid); if (p && num(c.qty) > 0) its.push({ pid: p.id, name: p.name, price: num(p.price), qty: num(c.qty), status: 'ordered', src: 'qr' }); });
+    cart.forEach(c => { const p = get('Products', c.pid); if (p && num(c.qty) > 0) its.push({ pid: p.id, name: p.name, price: num(p.price), qty: num(c.qty), status: 'ordered', src: 'qr', note: String(c.note || '').slice(0, 80) }); });
     setItems(b, its);
     return { ok: true };
   }
