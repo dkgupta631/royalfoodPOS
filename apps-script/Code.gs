@@ -15,11 +15,13 @@ const SESSION_SECONDS = 21600;     // 6 hours (the maximum Apps Script cache lif
 const SCHEMA = {
   Users: ['id', 'username', 'passwordHash', 'name', 'store', 'role', 'package', 'expireDate', 'createdAt', 'phone', 'email', 'address', 'tables', 'billing', 'price', 'options'],
   Zones: ['id', 'name', 'sort'],
-  Tables: ['id', 'zoneId', 'name', 'seats', 'sort'],
+  Tables: ['id', 'zoneId', 'name', 'seats', 'sort', 'qr', 'qrKey'], // qr: 'false' turns guest QR ordering off; qrKey: secret in the table's QR link
   Categories: ['id', 'name', 'sort'],
   Products: ['id', 'categoryId', 'name', 'price', 'stock', 'active', 'code', 'nameEn', 'image', 'desc', 'descEn', 'buffet', 'byWeight', 'extras', 'names'],
   Bills: ['id', 'tableId', 'tableName', 'status', 'seats', 'openedAt', 'closedAt', 'subtotal', 'discount', 'tax', 'total', 'payMethod', 'received', 'memberId', 'cashier', 'shiftId', 'items'],
-  Members: ['id', 'name', 'phone', 'points', 'createdAt'],
+  Members: ['id', 'name', 'phone', 'points', 'createdAt', 'username', 'passwordHash', 'code', 'typeId', 'totalPoints', 'birthday', 'email', 'lineUid', 'note'],
+  MemberTypes: ['id', 'name'],
+  Points: ['id', 'memberId', 'time', 'points', 'kind', 'billId', 'note', 'user'], // every change to a member's points
   Shifts: ['id', 'status', 'openedAt', 'closedAt', 'openingCash', 'closingCash', 'expectedCash', 'user'],
   Logs: ['id', 'time', 'user', 'action', 'detail'],
   Queue: ['id', 'number', 'name', 'people', 'status', 'createdAt'],
@@ -45,9 +47,12 @@ function doPost(e) {
       case 'register': return out_(register_(b));
       case 'menu': return out_(menu_(b));
       case 'order': return out_(withLock_(function () { return order_(b); }));
+      case 'member': return out_(memberHome_(b));
     }
     if (!auth_(b.token)) return out_({ ok: false, error: 'auth' });
     switch (b.action) {
+      case 'profile': return out_(withLock_(function () { return profile_(b); }));
+      case 'password': return out_(withLock_(function () { return password_(b); }));
       case 'ids': // a device asks for blocks of unused id numbers, e.g. {Bills: 10, Logs: 10}
         return out_(withLock_(function () {
           var ids = {};
@@ -86,13 +91,54 @@ function auth_(token) {
   if (!token) return false;
   var c = CacheService.getScriptCache(), u = c.get('tok_' + token);
   if (u) c.put('tok_' + token, u, SESSION_SECONDS); // sliding expiry
-  return !!u;
+  return !!u && u.indexOf('m:') !== 0;             // a member (customer) token never opens shop data
+}
+/* ---------- the signed-in user's own account ---------- */
+function me_(token) {
+  var name = String(CacheService.getScriptCache().get('tok_' + token) || '').toLowerCase();
+  return read_('Users').filter(function (x) { return x.username.toLowerCase() === name; })[0];
+}
+function profile_(b) {
+  var u = me_(b.token);
+  if (!u) return { ok: false, error: 'auth' };
+  // the username is fixed: it is never changed from the app
+  u.name = str_(b.name, 80) || u.name; u.store = str_(b.store, 80);
+  u.phone = str_(b.phone, 20).replace(/[^\d+]/g, ''); u.email = str_(b.email, 120); u.address = str_(b.address, 200);
+  upsert_('Users', u);
+  return { ok: true, user: publicUser_(u) };
+}
+function password_(b) {
+  var u = me_(b.token);
+  if (!u) return { ok: false, error: 'auth' };
+  if (b.oldHash !== u.passwordHash) { Utilities.sleep(800); return { ok: false, error: 'Wrong password' }; }
+  if (!/^[0-9a-f]{64}$/.test(String(b.newHash))) return { ok: false, error: 'Invalid password' };
+  u.passwordHash = b.newHash;
+  upsert_('Users', u);
+  return { ok: true };
+}
+/* ---------- member (customer) page: own details, points and paid bills only ---------- */
+function publicMember_(m) { return { id: m.id, name: m.name, phone: m.phone, points: m.points, username: m.username, createdAt: m.createdAt, code: m.code }; }
+function memberHome_(b) {
+  var c = CacheService.getScriptCache(), v = String(c.get('tok_' + b.token) || '');
+  if (v.indexOf('m:') !== 0) return { ok: false, error: 'auth' };
+  c.put('tok_' + b.token, v, SESSION_SECONDS);
+  var id = v.slice(2), m = read_('Members').filter(function (x) { return x.id === id; })[0];
+  if (!m || !m.username) return { ok: false, error: 'auth' };
+  var bills = read_('Bills').filter(function (x) { return x.memberId === id && x.status === 'closed'; })
+    .sort(function (x, y) { return String(y.closedAt).localeCompare(String(x.closedAt)); }).slice(0, 50)
+    .map(function (x) { var its = []; try { its = JSON.parse(x.items || '[]'); } catch (e) {} return { id: x.id, closedAt: x.closedAt, total: x.total, items: its.map(function (i) { return { name: i.name, qty: i.qty }; }) }; });
+  return { ok: true, member: publicMember_(m), bills: bills };
 }
 function login_(b) {
   var name = String(b.username || '').trim().toLowerCase();
   var u = read_('Users').filter(function (x) { return x.username.toLowerCase() === name && x.passwordHash === b.hash; })[0];
-  if (!u) { Utilities.sleep(800); return { ok: false, error: 'Incorrect username or password' }; }
-  return newSession_(u);
+  if (u) return newSession_(u);
+  // not a shop account: maybe a member (customer) with a login
+  var m = read_('Members').filter(function (x) { return x.username && x.username.toLowerCase() === name && x.passwordHash === b.hash; })[0];
+  if (!m) { Utilities.sleep(800); return { ok: false, error: 'Incorrect username or password' }; }
+  var token = Utilities.getUuid();
+  CacheService.getScriptCache().put('tok_' + token, 'm:' + m.id, SESSION_SECONDS);
+  return { ok: true, token: token, member: publicMember_(m) };
 }
 function register_(b) {
   if (String(b.code || '') !== REGISTER_CODE) return { ok: false, error: 'Invalid invite code' };
@@ -110,14 +156,22 @@ function register_(b) {
 }
 
 /* ---------- customer QR menu ---------- */
+/** Guest QR ordering is refused when the table's switch is off or the link carries an old key. */
+function qrBlock_(tb, b) {
+  if (tb.qr === 'false') return { ok: false, error: 'QR off' };
+  if ((tb.qrKey || '') !== String(b.key || '')) return { ok: false, error: 'Table not found' };
+  return null;
+}
 function menu_(b) {
   var tb = read_('Tables').filter(function (x) { return x.id === b.tableId; })[0];
   if (!tb) return { ok: false, error: 'Table not found' };
+  var no = qrBlock_(tb, b); if (no) return no;
   return { ok: true, table: tb.name, categories: read_('Categories'), products: read_('Products').filter(function (p) { return p.active !== 'false'; }) };
 }
 function order_(b) {
   var tb = read_('Tables').filter(function (x) { return x.id === b.tableId; })[0];
   if (!tb) return { ok: false, error: 'Table not found' };
+  var no = qrBlock_(tb, b); if (no) return no;
   var prods = read_('Products'), cart = (b.items || []).slice(0, 50);
   var bill = read_('Bills').filter(function (x) { return x.tableId === tb.id && x.status === 'open'; })[0] ||
     { id: String(reserve_('Bills', 1)[0]), tableId: tb.id, tableName: tb.name, status: 'open', seats: tb.seats, openedAt: new Date().toISOString(), discount: 0, cashier: 'QR', items: '[]' };
@@ -164,7 +218,7 @@ function upsert_(name, row) {
 }
 function del_(name, id) { var sh = sheet_(name), r = rowIndex_(sh, id); if (r > 0) sh.deleteRow(r); }
 /* ---------- numeric ids: 1, 2, 3 … ---------- */
-var FK_ = { Tables: { zoneId: 'Zones' }, Products: { categoryId: 'Categories' }, Bills: { tableId: 'Tables', shiftId: 'Shifts', memberId: 'Members' }, Reservations: { tableId: 'Tables' } };
+var FK_ = { Tables: { zoneId: 'Zones' }, Products: { categoryId: 'Categories' }, Bills: { tableId: 'Tables', shiftId: 'Shifts', memberId: 'Members' }, Reservations: { tableId: 'Tables' }, Members: { typeId: 'MemberTypes' }, Points: { memberId: 'Members', billId: 'Bills' } };
 function maxId_(name) {
   var sh = sheet_(name), last = sh.getLastRow(), m = 0;
   if (last < 2) return 0;

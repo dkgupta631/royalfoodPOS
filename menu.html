@@ -29,7 +29,7 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const COLORS = ['#0a7cff', '#1fa855', '#f59e0b', '#ef5350', '#8b5cf6', '#0ea5a4', '#ec4899', '#64748b'];
   const color = s => COLORS[[...String(s)].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
-  const tableId = new URLSearchParams(location.search).get('table'), cart = {};
+  const QS = new URLSearchParams(location.search), tableId = QS.get('table'), qrKey = QS.get('k') || '', cart = {};
   let menu, cat = 'all';
   I18N.apply(); window.addEventListener('rf-lang', () => { if (menu) draw(); });
   function say(msg, type = 'ok') { const el = document.createElement('div'); el.className = 'toast ' + type; el.textContent = msg; $('#toasts').appendChild(el); setTimeout(() => el.remove(), 3000); }
@@ -48,13 +48,13 @@
     else if (p) { cart[p.dataset.pid] = Math.min(99, (cart[p.dataset.pid] || 0) + 1); draw(); }
     else if (e.target.closest('#send')) {
       const btn = $('#send'); btn.disabled = true; $('#sum').textContent = 'Sending…';
-      try { await DB.publicOrder(tableId, Object.entries(cart).map(([pid, qty]) => ({ pid, qty }))); Object.keys(cart).forEach(k => delete cart[k]); say('Order sent to the kitchen. Thank you!'); }
-      catch (err) { say('Could not send the order. Please call staff.', 'bad'); }
+      try { await DB.publicOrder(tableId, Object.entries(cart).map(([pid, qty]) => ({ pid, qty })), qrKey); Object.keys(cart).forEach(k => delete cart[k]); say('Order sent to the kitchen. Thank you!'); }
+      catch (err) { say(err.message === 'QR off' ? 'Ordering by QR code is turned off for this table. Please call staff.' : 'Could not send the order. Please call staff.', 'bad'); }
       draw();
     }
   });
-  try { menu = await DB.publicMenu(tableId); $('#tname').textContent = 'Table ' + menu.table; draw(); }
-  catch (err) { $('#tname').textContent = ''; $('#grid').innerHTML = '<div class="empty">This table link is not valid. Please ask staff for help.</div>'; }
+  try { menu = await DB.publicMenu(tableId, qrKey); $('#tname').textContent = 'Table ' + menu.table; draw(); }
+  catch (err) { $('#tname').textContent = ''; $('#grid').innerHTML = `<div class="empty">${err.message === 'QR off' ? 'Ordering by QR code is turned off for this table. Please call staff.' : 'This table link is not valid. Please ask staff for help.'}</div>`; }
 })();
 </script>
 </body>

@@ -5,7 +5,7 @@ const DB = (() => {
   const CFG = window.APP_CONFIG || {};
   const remote = !!CFG.API_URL;
   const K = { db: 'rf_db', q: 'rf_queue', s: 'rf_session', u: 'rf_users', r: 'rf_recent', i: 'rf_ids' };
-  const SHEETS = ['Zones', 'Tables', 'Categories', 'Products', 'Bills', 'Members', 'Shifts', 'Logs', 'Queue', 'Reservations'];
+  const SHEETS = ['Zones', 'Tables', 'Categories', 'Products', 'Bills', 'Members', 'Shifts', 'Logs', 'Queue', 'Reservations', 'MemberTypes', 'Points'];
   const jget = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
   const jset = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
   const blank = () => Object.fromEntries(SHEETS.map(s => [s, []]));
@@ -30,9 +30,10 @@ const DB = (() => {
   }
   function uid(sheet) {
     if (!remote) return String(maxId(data[sheet] || []) + 1);
-    const p = pool[sheet] || [], id = p.shift();
+    const p = pool[sheet] || [], used = new Set((data[sheet] || []).map(r => String(r.id)));
+    let id = p.shift(); while (id && used.has(id)) id = p.shift(); // never reuse a number this device already has
     jset(K.i, pool); if (p.length <= LOW) refill();
-    return id || String(Date.now() * 100 + Math.floor(Math.random() * 100)); // offline with no numbers left: a long, still unique number
+    return id || String(maxId(data[sheet] || []) + 1);              // no reserved number left (offline, or old script): the next number after the highest
   }
   const num = v => Number(v) || 0;
 
@@ -71,12 +72,28 @@ const DB = (() => {
     if (remote) {
       const res = await api({ action: 'login', username, hash: h });
       if (!res.ok) throw new Error(res.error || 'Login failed');
+      if (res.member) { jset(K.s, { token: res.token, member: res.member }); return res.member; } // a customer: goes to member.html
       return startSession(res.token, res.user);
     }
     const u = (await localUsers()).find(x => x.username.toLowerCase() === username.toLowerCase() && x.passwordHash === h);
-    if (!u) throw new Error('Incorrect username or password');
+    if (!u) {
+      const m = (jget(K.db, {}).Members || []).find(x => x.username && x.username.toLowerCase() === username.toLowerCase() && x.passwordHash === h);
+      if (!m) throw new Error('Incorrect username or password');
+      jset(K.s, { token: 'local', member: pubMember(m) }); return m;
+    }
     const { passwordHash, ...user } = u;
     return startSession('local', user);
+  }
+  /* member (customer) page: own details, points and paid bills */
+  const pubMember = m => ({ id: m.id, name: m.name, phone: m.phone, points: m.points, username: m.username, createdAt: m.createdAt, code: m.code });
+  async function memberHome() {
+    const s = session();
+    if (remote) { const res = await api({ action: 'member', token: s.token }); if (!res.ok) throw new Error(res.error || 'failed'); return res; }
+    const d = jget(K.db, {}), m = (d.Members || []).find(x => x.id === s.member.id);
+    if (!m || !m.username) throw new Error('auth');
+    const bills = (d.Bills || []).filter(b => b.memberId === m.id && b.status === 'closed').sort((a, b) => String(b.closedAt).localeCompare(String(a.closedAt))).slice(0, 50)
+      .map(b => ({ id: b.id, closedAt: b.closedAt, total: b.total, items: items(b).map(i => ({ name: i.name, qty: i.qty })) }));
+    return { member: pubMember(m), bills };
   }
   async function register({ username, password, name, store, code, ...extra }) {
     username = String(username).trim();
@@ -95,7 +112,37 @@ const DB = (() => {
     const { passwordHash, ...user } = u;
     return startSession('local', user);
   }
-  function logout() { localStorage.removeItem(K.s); localStorage.removeItem(K.i); pool = {}; }
+  /* the signed-in user's own account */
+  function setUser(user) { const s = session(); const old = s.user.username; s.user = user; jset(K.s, s); jset(K.r, recent().filter(x => x.username !== old)); remember(user); return user; }
+  async function updateProfile(f, password) {
+    const me = session().user, username = String(f.username || me.username).trim(), rename = username !== me.username;
+    if (rename && !/^[\w.-]{3,30}$/.test(username)) throw new Error('Invalid username');
+    const oldHash = rename ? await hash(me.username, password) : '', newHash = rename ? await hash(username, password) : '';
+    if (remote) {
+      const res = await api({ action: 'profile', token: session().token, username, oldHash, newHash, name: f.name, store: f.store, phone: f.phone, email: f.email, address: f.address });
+      if (!res.ok) throw new Error(res.error || 'Could not save');
+      return setUser(res.user);
+    }
+    const users = await localUsers(), u = users.find(x => x.username === me.username);
+    if (!u) throw new Error('auth');
+    if (rename) {
+      if (users.some(x => x !== u && x.username.toLowerCase() === username.toLowerCase())) throw new Error('Username already exists');
+      if (u.passwordHash !== oldHash) throw new Error('Wrong password');
+      u.username = username; u.passwordHash = newHash;
+    }
+    Object.assign(u, { name: f.name || u.name, store: f.store || '', phone: f.phone || '', email: f.email || '', address: f.address || '' });
+    jset(K.u, users);
+    const { passwordHash, ...user } = u;
+    return setUser(user);
+  }
+  async function changePassword(oldPw, newPw) {
+    const me = session().user, oldHash = await hash(me.username, oldPw), newHash = await hash(me.username, newPw);
+    if (remote) { const res = await api({ action: 'password', token: session().token, oldHash, newHash }); if (!res.ok) throw new Error(res.error || 'Could not save'); return; }
+    const users = await localUsers(), u = users.find(x => x.username === me.username);
+    if (!u || u.passwordHash !== oldHash) throw new Error('Wrong password');
+    u.passwordHash = newHash; jset(K.u, users);
+  }
+  function logout() { localStorage.removeItem(K.s); } // the reserved id numbers stay on this device, so the next login continues the sequence without gaps
   const recent = () => jget(K.r, []);
   const forget = username => jset(K.r, recent().filter(x => x.username !== username));
 
@@ -192,18 +239,21 @@ const DB = (() => {
   }
 
   /* ---------- customer QR menu (no login) ---------- */
-  async function publicMenu(tableId) {
-    if (remote) { const res = await api({ action: 'menu', tableId }); if (!res.ok) throw new Error(res.error); return res; }
+  const qrOk = (tb, key) => { if (String(tb.qr) === 'false') throw new Error('QR off'); if ((tb.qrKey || '') !== String(key || '')) throw new Error('Table not found'); };
+  async function publicMenu(tableId, key) {
+    if (remote) { const res = await api({ action: 'menu', tableId, key }); if (!res.ok) throw new Error(res.error); return res; }
     await load();
     const tb = get('Tables', tableId);
     if (!tb) throw new Error('Table not found');
+    qrOk(tb, key);
     return { table: tb.name, categories: list('Categories'), products: list('Products').filter(p => String(p.active) !== 'false') };
   }
-  async function publicOrder(tableId, cart) {
-    if (remote) { const res = await api({ action: 'order', tableId, items: cart }); if (!res.ok) throw new Error(res.error); return res; }
+  async function publicOrder(tableId, cart, key) {
+    if (remote) { const res = await api({ action: 'order', tableId, key, items: cart }); if (!res.ok) throw new Error(res.error); return res; }
     await load();
     const tb = get('Tables', tableId);
     if (!tb) throw new Error('Table not found');
+    qrOk(tb, key);
     const b = openBill(tableId) || newBill(tb, tb.seats, 'QR');
     const its = items(b);
     cart.forEach(c => { const p = get('Products', c.pid); if (p && num(c.qty) > 0) its.push({ pid: p.id, name: p.name, price: num(p.price), qty: num(c.qty), status: 'ordered', src: 'qr' }); });
@@ -211,7 +261,7 @@ const DB = (() => {
     return { ok: true };
   }
 
-  return { remote, session, login, register, logout, recent, forget, load, flush, list, get, save, remove, log, items, setItems, calc, openBill, newBill,
+  return { remote, session, login, register, hash, memberHome, updateProfile, changePassword, logout, recent, forget, load, flush, list, get, save, remove, log, items, setItems, calc, openBill, newBill,
     publicMenu, publicOrder, img, extras, names, pname, num, uid, onStatus: f => subs.push(f), get status() { return status; }, get pending() { return queue.length; },
     export: () => JSON.stringify(data, null, 2) };
 })();

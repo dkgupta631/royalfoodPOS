@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a7cff">
+<title>Member — Royalfood</title>
+<link rel="icon" type="image/png" href="assets/img/favicon.png"><link rel="apple-touch-icon" href="assets/img/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700;800&family=Noto+Sans+Thai:wght@400;600;700;800&family=Noto+Sans+Lao:wght@400;600;700&family=Noto+Sans+Khmer:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .mp{max-width:680px;margin:0 auto;padding:0 14px 40px}
+  .mp-head{display:flex;align-items:center;gap:12px;padding:14px 0}
+  .mp-head .logo{width:44px;height:44px;border-radius:12px;flex:none}
+  .mp-head b{display:block;font-size:18px}.mp-head small{color:var(--muted)}
+  .mp-head .sp{flex:1}
+  .mp-lang{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px}
+  .mp-lang button{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:9px;border:1px solid var(--line);background:var(--card);font-weight:600;font-size:13px}
+  .mp-lang button.on{border-color:var(--pri);color:var(--pri);background:var(--pri-soft)}
+  .mp-card{padding:22px;color:#fff;border:0;background:linear-gradient(135deg,#0a7cff,#1e40af);box-shadow:0 16px 36px rgba(10,80,200,.3)}
+  .mp-card h2{font-size:22px;font-weight:800}.mp-card p{opacity:.85;margin-top:2px}
+  .mp-pts{display:flex;align-items:flex-end;gap:10px;margin-top:20px}
+  .mp-pts b{font-size:46px;line-height:1;font-weight:800}.mp-pts span{opacity:.85;padding-bottom:5px;font-weight:600}
+  .mp h3{font-size:16px;margin:22px 4px 10px;color:var(--muted)}
+  .mp-bill{padding:14px 16px;border-bottom:1px solid var(--line)}.mp-bill:last-child{border-bottom:0}
+  .mp-bill .bt{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+  .mp-bill small{display:block;color:var(--muted);margin-top:3px}
+</style>
+</head>
+<body>
+<div class="mp">
+  <div class="mp-head"><span class="logo" data-logo></span><span><b data-brand></b><small>Member</small></span><span class="sp"></span><button class="btn ghost sm" id="out">Log out</button></div>
+  <div class="mp-lang" id="langs"></div>
+  <div id="body"><div class="empty">Loading…</div></div>
+</div>
+<script charset="utf-8" src="assets/js/config.js"></script>
+<script charset="utf-8" src="assets/js/i18n.js"></script>
+<script charset="utf-8" src="assets/js/i18n-ui.js"></script>
+<script charset="utf-8" src="assets/js/db.js"></script>
+<script>
+(async () => {
+  const CFG = APP_CONFIG, $ = s => document.querySelector(s), num = DB.num, sess = DB.session();
+  if (!sess || !sess.member) { location.replace(sess ? 'app.html' : 'index.html'); return; }
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const money = v => num(v).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  const p2 = n => String(n).padStart(2, '0');
+  const fmt = d => { d = new Date(d); return isNaN(d) ? '-' : `${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()} ${p2(d.getHours())}:${p2(d.getMinutes())}`; };
+  const leave = () => { DB.logout(); location.replace('index.html'); };
+  let home = null, failed = false;
+  function langs() { $('#langs').innerHTML = I18N.LANGS.map(l => `<button data-l="${l.code}" class="${l.code === I18N.lang ? 'on' : ''}">${l.flag} ${l.label}</button>`).join(''); }
+  function draw() {
+    I18N.apply(); langs();
+    if (failed) { $('#body').innerHTML = '<div class="card"><div class="empty">Could not load your details. Check your connection.</div></div>'; return; }
+    if (!home) return;
+    const m = home.member, bills = home.bills;
+    $('#body').innerHTML = `<div class="card mp-card"><h2>${esc(m.name)}</h2><p>${m.code ? esc(m.code) + ' · ' : ''}${esc(m.username)}${m.phone ? ' · ' + esc(m.phone) : ''}</p>
+        <div class="mp-pts"><b>${money(m.points)}</b><span>Points</span></div></div>
+      <h3>Past bills</h3>
+      <div class="card">${bills.length ? bills.map(b => `<div class="mp-bill"><div class="bt"><b>${fmt(b.closedAt)}</b><b>${money(b.total)} ${esc(CFG.CURRENCY)}</b></div>
+        <small>${b.items.map(i => `${esc(i.name)} x${num(i.qty)}`).join(', ')}</small></div>`).join('') : '<div class="empty">No bills yet</div>'}</div>`;
+  }
+  $('#out').onclick = leave;
+  $('#langs').onclick = e => { const b = e.target.closest('[data-l]'); if (b) { I18N.set(b.dataset.l); draw(); } };
+  window.addEventListener('rf-lang', draw);
+  I18N.apply(); langs();
+  try { home = await DB.memberHome(); } catch (err) { if (err.message === 'auth') { leave(); return; } failed = true; }
+  draw();
+})();
+</script>
+</body>
+</html>

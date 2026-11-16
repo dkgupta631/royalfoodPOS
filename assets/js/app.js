@@ -1,6 +1,7 @@
 (async () => {
   const CFG = window.APP_CONFIG, sess = DB.session();
   if (!sess) { location.replace('index.html'); return; }
+  if (sess.member) { location.replace('member.html'); return; } // customers only get their own page
   const U = sess.user, num = DB.num;
   const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -44,12 +45,14 @@
     return { el: m, close };
   }
   function confirmBox(msg, onYes, danger = true) {
-    const m = modal(`<div class="center"><h3>${esc(msg)}</h3></div><div class="actions center"><button class="btn ${danger ? 'red' : ''}" data-yes>${esc(t('confirm'))}</button><button class="btn gray" data-close>${esc(t('close'))}</button></div>`);
+    const m = modal(`<span class="cf-ic ${danger ? '' : 'info'}">${ic(danger ? 'triangle-alert' : 'circle-help')}</span><h3>${esc(msg)}</h3><p>${danger ? 'This action cannot be undone.' : 'Please confirm to continue.'}</p>
+      <div class="actions"><button class="btn ghost" data-close>${esc(t('cancel'))}</button><button class="btn ${danger ? 'red' : ''}" data-yes>${ic(danger ? 'trash-2' : 'check')} ${esc(t('confirm'))}</button></div>`, 'cf');
     $('[data-yes]', m.el).onclick = () => { m.close(); onYes(); };
+    setTimeout(() => { const b = $('[data-close]', m.el); if (b) b.focus(); }, 120); // Enter never deletes by accident
   }
   function formModal(title, fields, vals, onOk, onDel) {
-    const m = modal(`<form><h3>${esc(title)}</h3>${fields.map(f => `<div class="f"><label>${esc(f.label)}</label>${f.options
-      ? `<select name="${f.k}">${f.options.map(o => `<option value="${esc(o[0])}" ${String(vals[f.k] == null ? '' : vals[f.k]) === String(o[0]) ? 'selected' : ''}>${esc(o[1])}</option>`).join('')}</select>`
+    const m = modal(`<form><h3>${esc(title)}</h3>${fields.map(f => `<div class="f"><label>${esc(f.label)}${f.req ? ' <span class="reqd">*</span>' : ''}</label>${f.options
+      ? `<select name="${f.k}" ${f.req ? 'required' : ''}>${f.options.map(o => `<option value="${esc(o[0])}" ${String(vals[f.k] == null ? '' : vals[f.k]) === String(o[0]) ? 'selected' : ''}>${esc(o[1])}</option>`).join('')}</select>`
       : `<input name="${f.k}" type="${f.type || 'text'}" value="${esc(vals[f.k] == null ? '' : vals[f.k])}" ${f.req ? 'required' : ''} ${f.type === 'number' ? 'step="any"' + (f.neg ? '' : ' min="0"') : 'maxlength="120"'} placeholder="${esc(f.ph || '')}">`}</div>`).join('')}
       <div class="actions">${onDel ? `<button type="button" class="btn red" data-del style="margin-right:auto">${esc(t('delete'))}</button>` : ''}<button type="button" class="btn ghost" data-close>${esc(t('close'))}</button><button class="btn">${esc(t('save'))}</button></div></form>`);
     $('form', m.el).addEventListener('submit', e => { e.preventDefault(); if (onOk(Object.fromEntries(new FormData(e.target))) !== false) m.close(); });
@@ -244,11 +247,29 @@
         });
       },
       qr: () => {
-        const url = new URL('menu.html?table=' + encodeURIComponent(tb.id), location.href).href;
-        const m = modal(`<div class="center"><h3>${esc(t('qrcode'))} — ${esc(tb.name)}</h3><p style="color:var(--muted)">Guests scan to order from this table</p><div id="qrbox" style="display:grid;place-items:center;margin:18px auto;padding:14px;background:#fff;border-radius:16px;width:max-content"></div>
-          <input class="input" readonly value="${esc(url)}" onclick="this.select()">${DB.remote ? '' : '<p class="note" style="text-align:left">Demo mode: the menu link only works in this browser.</p>'}</div>
-          <div class="actions center"><button class="btn gray" data-close>${esc(t('close'))}</button></div>`);
-        if (window.QRCode) new QRCode($('#qrbox', m.el), { text: url, width: 200, height: 200 });
+        // Each table has its own switch (qr) and its own secret in the link (qrKey); changing the key makes old printed codes stop working.
+        const on = () => String(tb.qr) !== 'false';
+        const link = () => new URL('menu.html?table=' + encodeURIComponent(tb.id) + (tb.qrKey ? '&k=' + encodeURIComponent(tb.qrKey) : ''), location.href).href;
+        const m = modal(`<header class="pm-head"><span class="pm-ic">${ic('qr-code')}</span><div class="pm-ttl"><h3>${esc(tb.name)}</h3><small>Qrcode Table</small></div>
+            <button type="button" class="pm-x eye" data-eye aria-label="Show or hide the switch">${ic('eye-off')}</button><button type="button" class="pm-x" data-close aria-label="${esc(t('close'))}">${ic('x')}</button></header>
+          <div class="pm-body qrb">
+            <label class="mcard qr-en sw" data-en><span class="ib">${ic('utensils')}</span><span class="grow"><b>Enable</b><small>Enable receiving orders from customers via QR Code</small></span><input type="checkbox" data-on ${on() ? 'checked' : ''}><i></i></label>
+            <div class="mcard qr-card"><div class="qr-frame"><div data-qr></div><div class="qr-off" data-off hidden>${ic('ban')}<span>QR ordering is off for this table</span></div></div>
+              <span class="qr-chip">${ic('smartphone')} Scan to order food</span>
+              ${DB.remote ? '' : '<p class="hint">Demo mode: the menu link only works in this browser.</p>'}</div>
+          </div>
+          <footer class="pm-foot qrf"><button class="btn" data-print>${ic('printer')} Print</button><button class="btn-soft" data-new>${ic('refresh-cw')} Change QRcode</button><button class="btn ghost" data-close>${ic('x')} ${esc(t('close'))}</button></footer>`, 'drawerless qrm');
+        const box = $('[data-qr]', m.el);
+        const draw = () => {
+          box.innerHTML = ''; if (window.QRCode) new QRCode(box, { text: link(), width: 220, height: 220 });
+          $('[data-off]', m.el).hidden = on(); $('.qr-frame', m.el).classList.toggle('off', !on()); $('[data-print]', m.el).disabled = !on();
+        };
+        $('[data-on]', m.el).onchange = e => { tb.qr = String(e.target.checked); DB.save('Tables', tb); DB.log('QR ordering', `${tb.name} ${on() ? 'on' : 'off'}`); toast(on() ? 'QR ordering is on' : 'QR ordering is off', on() ? 'ok' : 'bad'); draw(); };
+        $('[data-eye]', m.el).onclick = e => { const en = $('[data-en]', m.el); en.hidden = !en.hidden; e.currentTarget.innerHTML = ic(en.hidden ? 'eye' : 'eye-off'); icons(); };
+        $('[data-new]', m.el).onclick = () => confirmBox(`Change QRcode — ${tb.name}?`, () => { tb.qrKey = Math.random().toString(36).slice(2, 10); DB.save('Tables', tb); DB.log('Change QRcode', tb.name); toast('New QR code created'); draw(); });
+        $('[data-print]', m.el).onclick = () => { const c = $('canvas', box); if (!c) return;
+          printHtml(`<div class="tk"><h3>${esc(U.store || CFG.BRAND)}</h3><div class="c qt">${esc(tb.name)}</div><div class="c"><img class="qimg" src="${c.toDataURL('image/png')}" alt=""></div><div class="c"><b>Scan to order food</b></div></div>`); };
+        draw();
       },
       cancel: () => confirmBox(`${t('cancel')} ${tb.name}?`, () => { Object.assign(bill, { status: 'cancelled', closedAt: new Date().toISOString() }); DB.save('Bills', bill); DB.log('Cancel bill', `${tb.name} ${money(c.total)}`); toast('Bill cancelled'); render(); }),
       move: () => {
@@ -339,7 +360,7 @@
       DB.setItems(bill, its);
       its.forEach(i => { const p = DB.get('Products', i.pid); if (p && tracked(p)) { p.stock = num(p.stock) - num(i.qty); DB.save('Products', p); } });
       const mem = DB.get('Members', bill.memberId), pts = Math.floor(c.total / (num(CFG.POINTS_PER) || 100));
-      if (mem && pts) { mem.points = num(mem.points) + pts; DB.save('Members', mem); }
+      if (mem && pts) addPoints(mem, pts, 'earn', `Bill #${bill.id}`, bill.id);
       DB.log('Check out', `${bill.tableName} ${money(c.total)} ${CFG.CURRENCY} (${method})`);
       m.close(); render();
       const d = modal(`<div class="center"><div style="width:74px;height:74px;border-radius:50%;background:#dcfce7;color:#16a34a;display:grid;place-items:center;margin:0 auto 14px;font-size:34px;animation:pop .5s">${ic('check')}</div>
@@ -611,18 +632,185 @@
   };
 
   /* ---------- Members ---------- */
+  const today = () => dayOf(new Date());
+  function dayOf(v) { const d = new Date(v); return isNaN(d) ? '' : `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; }
+  const KIND = { earn: ['Earned', 'g'], redeem: ['Used', 'r'], adjust: ['Adjusted', 'a'] };
+  const accPts = m => Math.max(num(m.totalPoints), num(m.points));
+  // Every change to a member's points goes through here, so it is also written to the Points history.
+  function addPoints(m, d, kind, note, billId) {
+    if (!d) return;
+    const acc = accPts(m);
+    m.points = num(m.points) + d; m.totalPoints = acc + Math.max(0, d); // accumulated points only ever go up
+    DB.save('Members', m);
+    DB.save('Points', { memberId: m.id, time: new Date().toISOString(), points: d, kind, billId: billId || '', note: note || '', user: U.username });
+  }
+  function downloadCsv(name, rows) {
+    const text = rows.map(r => r.map(c => `"${String(c == null ? '' : c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }));
+    a.download = `${name}-${today()}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   V.member = root => {
-    const q = S.q.toLowerCase(), list = DB.list('Members').filter(m => (m.name + ' ' + m.phone).toLowerCase().includes(q));
-    const mf = [{ k: 'name', label: 'Name', req: 1 }, { k: 'phone', label: 'Phone', req: 1 }, { k: 'points', label: 'Points', type: 'number' }];
-    root.innerHTML = `<div class="head"><input class="input" data-q style="max-width:240px" placeholder="${esc(t('search'))}" value="${esc(S.q)}"><span class="sp"></span><button class="btn" data-act="add">${ic('user-plus')} ${esc(t('member'))}</button></div>
-      <div class="card tw">${list.length ? `<table class="t"><thead><tr><th>Name</th><th>Phone</th><th class="r">Points</th><th class="hide-s">Joined</th><th></th></tr></thead><tbody>
-      ${list.map(m => `<tr><td><b>${esc(m.name)}</b></td><td>${esc(m.phone)}</td><td class="r"><span class="tag b">${money(m.points)}</span></td><td class="hide-s">${fmtDT(m.createdAt)}</td>
-        <td class="r"><button class="icb" data-act="edit" data-id="${esc(m.id)}" aria-label="Edit">${ic('pencil')}</button><button class="icb del" data-act="del" data-id="${esc(m.id)}" aria-label="Delete">${ic('trash-2')}</button></td></tr>`).join('')}</tbody></table>` : empty('users')}</div>`;
-    acts = {
-      add: () => formModal('New member', mf, { points: 0 }, o => { DB.save('Members', { name: o.name.trim(), phone: o.phone.trim(), points: num(o.points), createdAt: new Date().toISOString() }); toast('Saved'); render(); }),
-      edit: el => { const m = DB.get('Members', el.dataset.id); formModal('Edit member', mf, m, o => { Object.assign(m, { name: o.name.trim(), phone: o.phone.trim(), points: num(o.points) }); DB.save('Members', m); render(); }); },
-      del: el => { const m = DB.get('Members', el.dataset.id); confirmBox(`${t('delete')} ${m.name}?`, () => { DB.remove('Members', m.id); render(); }); }
+    S.mtab = S.mtab || 'member'; S.mtype = S.mtype || 'all'; S.d1 = S.d1 || today(); S.d2 = S.d2 || today(); S.rmode = S.rmode || 'member';
+    const members = DB.list('Members'), types = DB.list('MemberTypes'), q = S.q.trim().toLowerCase();
+    const typeName = id => (DB.get('MemberTypes', id) || {}).name || '';
+    const mName = id => (DB.get('Members', id) || {}).name || '—';
+    const mText = m => [m.name, m.phone, m.code, m.username].join(' ').toLowerCase();
+    if (S.mtype !== 'all' && !types.some(x => x.id === S.mtype)) S.mtype = 'all';
+    const TABS = [['member', 'users', 'Member'], ['type', 'id-card', 'Member Type'], ['rewards', 'gift', 'Rewards History'], ['report', 'chart-line', 'Member Report']];
+    const tabs = `<div class="gtabs">${TABS.map(x => `<button class="${S.mtab === x[0] ? 'on' : ''}" data-act="mtab" data-id="${x[0]}">${ic(x[1])}<span>${x[2]}</span></button>`).join('')}</div>`;
+    const search = ph => `<label class="gsearch">${ic('search')}<input class="input" data-q placeholder="${esc(ph || t('search'))}" value="${esc(S.q)}"></label>`;
+    const dates = `<b class="mut">Date</b><input type="date" class="input dt" data-chg="d1" value="${esc(S.d1)}" aria-label="From"><span class="mut">–</span><input type="date" class="input dt" data-chg="d2" value="${esc(S.d2)}" aria-label="To">
+      <button class="btn green" data-act="go">${ic('search')} Search</button>`;
+    const inRange = iso => { const d = dayOf(iso); return d >= S.d1 && d <= S.d2; };
+    const ledger = DB.list('Points').filter(x => inRange(x.time)).sort((a, b) => String(b.time).localeCompare(String(a.time)));
+
+    // Saves a member. The login is optional; the password is stored only as a hash made from username + password.
+    const saveMember = (m, o) => {
+      const username = (o.username || '').trim(), pw = o.password || '', had = m.username || '', isNew = !m.id, code = (o.code || '').trim();
+      if (!o.name.trim()) { toast('Enter a name', 'bad'); return false; }
+      if (!o.phone.trim()) { toast('Enter a phone number', 'bad'); return false; }
+      if (code && members.some(x => x !== m && String(x.code || '').toLowerCase() === code.toLowerCase())) { toast('That member ID is already used', 'bad'); return false; }
+      if (!o.typeId || !DB.get('MemberTypes', o.typeId)) { toast('Choose a member type', 'bad'); return false; }
+      if (!username) { toast('Enter a username for this member', 'bad'); return false; }
+      if (username) {
+        if (!/^[\w.-]{3,30}$/.test(username)) { toast('Use a-z, 0-9, dot or dash, 3–30 characters', 'bad'); return false; }
+        if (members.some(x => x !== m && String(x.username || '').toLowerCase() === username.toLowerCase())) { toast('That username is already taken', 'bad'); return false; }
+        if (!pw && (username.toLowerCase() !== had.toLowerCase() || !m.passwordHash)) { toast('Enter a password for this member', 'bad'); return false; }
+        if (pw && pw.length < 6) { toast('Use at least 6 characters', 'bad'); return false; }
+      } else if (pw) { toast('Enter a username for this member', 'bad'); return false; }
+      const diff = num(o.points) - num(m.points);
+      Object.assign(m, { name: o.name.trim(), phone: o.phone.trim(), code, typeId: o.typeId || '', birthday: o.birthday || '', username,
+        email: (o.email || '').trim(), lineUid: (o.lineUid || '').trim(), note: (o.note || '').trim() });
+      if (isNew) Object.assign(m, { points: 0, totalPoints: 0, createdAt: new Date().toISOString() });
+      if (!username) m.passwordHash = '';
+      const done = () => {
+        DB.save('Members', m);
+        if (!m.code) { m.code = 'M' + String(m.id).padStart(5, '0'); DB.save('Members', m); }
+        addPoints(m, diff, 'adjust', isNew ? 'Opening points' : 'Edited by staff');
+        toast('Saved'); render();
+      };
+      if (username && pw) DB.hash(username, pw).then(h => { m.passwordHash = h; done(); }); else done();
     };
+    // Member popup. Required: name, phone, member type, username, password (the password only when it has to be set).
+    const memberModal = (m, vals) => {
+      const isNew = !m.id, v = k => esc(vals[k] == null ? '' : vals[k]), star = ' <span class="reqd">*</span>';
+      const fi = (k, label, attrs = '', req) => `<div class="f"><label for="mm_${k}">${label}${req ? star : ''}</label><input id="mm_${k}" name="${k}" value="${v(k)}" ${attrs}></div>`;
+      const d = modal(`<form class="pm-form" novalidate>
+        <header class="pm-head"><span class="pm-ic">${ic(isNew ? 'user-plus' : 'user-pen')}</span><div class="pm-ttl"><small>${isNew ? 'New member' : 'Edit member'}</small><h3>${esc(t('member'))}</h3></div>
+          <button type="button" class="pm-x" data-close aria-label="${esc(t('close'))}">${ic('x')}</button></header>
+        <div class="pm-body mm">
+          <div class="mcard"><div class="mgrid">
+            ${fi('code', 'Member ID', 'maxlength="30" placeholder="Leave empty to create one automatically"')}${fi('name', 'Name', 'maxlength="80" placeholder="Member name"', 1)}
+            ${fi('phone', 'Telephone', 'maxlength="20" inputmode="tel" placeholder="0xxxxxxxxx"', 1)}${fi('email', 'E-mail', 'maxlength="120" type="email" placeholder="email@example.com"')}
+            ${fi('lineUid', 'Line UID', 'maxlength="60"')}${fi('birthday', 'Birthday', 'type="date"')}
+            <div class="f full"><label for="mm_typeId">Member Type${star}</label><select id="mm_typeId" name="typeId"><option value="">—</option>${types.map(x => `<option value="${esc(x.id)}" ${x.id === vals.typeId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>
+            <div class="f full"><label for="mm_note">Note</label><textarea id="mm_note" name="note" rows="3" maxlength="300">${v('note')}</textarea></div>
+          </div></div>
+          <div class="mcard"><h4>${ic('key-round')} Member login</h4><div class="mgrid">
+            ${fi('username', 'Username', 'maxlength="30" autocapitalize="none" autocomplete="off" placeholder="For member login"', 1)}
+            ${fi('password', m.passwordHash ? 'New password' : 'Password', `type="password" autocomplete="new-password" placeholder="${m.passwordHash ? 'Leave empty to keep the current one' : 'At least 6 characters'}"`, !m.passwordHash)}
+            ${fi('points', 'Points', 'type="number" min="0" step="any" inputmode="decimal"')}
+          </div></div>
+        </div>
+        <footer class="pm-foot"><span class="sp"></span><button type="button" class="btn ghost" data-close>${ic('x')} ${esc(t('close'))}</button><button class="btn">${ic('save')} ${esc(t('save'))}</button></footer>
+      </form>`, 'pm');
+      const f = $('form', d.el);
+      f.addEventListener('submit', e => { e.preventDefault(); if (saveMember(m, Object.fromEntries(new FormData(f))) !== false) d.close(); });
+    };
+    const viewMember = m => {
+      const hist = DB.list('Points').filter(x => x.memberId === m.id).sort((a, b) => String(b.time).localeCompare(String(a.time))).slice(0, 30);
+      const row = (l, v) => `<div class="sumrow"><span>${esc(l)}</span><b>${v}</b></div>`;
+      const d = modal(`<h3>${esc(m.name)}</h3>${row('Member ID', esc(m.code || '—'))}${row('Phone', esc(m.phone || '—'))}${row('Member Type', esc(typeName(m.typeId) || '—'))}${row('E-mail', esc(m.email || '—'))}${row('Line UID', esc(m.lineUid || '—'))}${row('Birthday', esc(m.birthday || '—'))}
+        ${row('Username', esc(m.username || '—'))}${row('Remaining points', `<span class="tag b">${money(m.points)}</span>`)}${row('Accumulated points', money(accPts(m)))}
+        <h4 style="margin:16px 0 6px">Points history</h4><div class="tw" style="max-height:230px;overflow:auto">${hist.length ? `<table class="t"><tbody>${hist.map(x => `<tr><td style="white-space:nowrap">${fmtDT(x.time)}</td>
+          <td><span class="tag ${(KIND[x.kind] || KIND.adjust)[1]}">${(KIND[x.kind] || KIND.adjust)[0]}</span> ${esc(x.note || '')}</td><td class="r"><b>${num(x.points) > 0 ? '+' : ''}${money(x.points)}</b></td></tr>`).join('')}</tbody></table>` : empty('gift')}</div>
+        <div class="actions"><button class="btn amber" data-use ${num(m.points) > 0 ? '' : 'disabled'}>${ic('gift')} Use points</button><button class="btn gray" data-close>${esc(t('close'))}</button></div>`);
+      $('[data-use]', d.el).onclick = () => formModal(`Use points — ${m.name} (${money(m.points)})`, [{ k: 'n', label: 'Points to use', type: 'number', req: 1 }, { k: 'note', label: 'Reward / note', req: 1 }], {}, o => {
+        const n = Math.floor(num(o.n));
+        if (n <= 0) return false;
+        if (n > num(m.points)) { toast('Not enough points', 'bad'); return false; }
+        addPoints(m, -n, 'redeem', o.note.trim()); DB.log('Use points', `${m.name} -${n} (${o.note.trim()})`); toast('Points used'); d.close(); render();
+      });
+    };
+    const common = {
+      mtab: el => { S.mtab = el.dataset.id; S.q = ''; render(true); },
+      d1: el => { if (el.value) S.d1 = el.value; if (S.d2 < S.d1) S.d2 = S.d1; render(); }, d2: el => { if (el.value) S.d2 = el.value; if (S.d2 < S.d1) S.d1 = S.d2; render(); },
+      go: () => render(), today: () => { S.d1 = S.d2 = today(); render(); }
+    };
+
+    if (S.mtab === 'type') {
+      const list = types.filter(x => x.name.toLowerCase().includes(q)), tf = [{ k: 'name', label: 'Member type name', req: 1 }];
+      root.innerHTML = `${tabs}<div class="card gcard"><div class="gbar">${search()}<span class="sp"></span><button class="btn green" data-act="addT">${ic('plus')} ${esc(t('add'))}</button></div>
+        ${list.length ? `<div class="tw"><table class="t"><thead><tr><th>#</th><th>Member type name</th><th class="r">Number of members</th><th></th></tr></thead><tbody>${list.map(x => `<tr><td>${esc(x.id)}</td><td><b>${esc(x.name)}</b></td>
+          <td class="r"><span class="tag n">${members.filter(m => m.typeId === x.id).length}</span></td>
+          <td class="r" style="white-space:nowrap"><button class="btn sm amber" data-act="editT" data-id="${esc(x.id)}">${ic('square-pen')} Edit</button> <button class="btn sm red" data-act="delT" data-id="${esc(x.id)}">${ic('trash-2')} ${esc(t('delete'))}</button></td></tr>`).join('')}</tbody></table></div>` : empty('id-card')}</div>`;
+      acts = Object.assign(common, {
+        addT: () => formModal('New member type', tf, {}, o => { DB.save('MemberTypes', { name: o.name.trim() }); toast('Saved'); render(); }),
+        editT: el => { const x = DB.get('MemberTypes', el.dataset.id); formModal('Edit member type', tf, x, o => { x.name = o.name.trim(); DB.save('MemberTypes', x); toast('Saved'); render(); }); },
+        delT: el => { const x = DB.get('MemberTypes', el.dataset.id);
+          if (members.some(m => m.typeId === x.id)) { toast('Move the members out of this type first', 'bad'); return; }
+          confirmBox(`${t('delete')} ${x.name}?`, () => { DB.remove('MemberTypes', x.id); render(); }); }
+      });
+      return;
+    }
+
+    if (S.mtab === 'rewards') {
+      const list = ledger.filter(x => x.kind === 'redeem' && (mName(x.memberId) + ' ' + x.note).toLowerCase().includes(q));
+      root.innerHTML = `${tabs}<div class="card gcard"><div class="gbar">${dates}<span class="sp"></span><button class="btn" data-act="exp" ${list.length ? '' : 'disabled'}>${ic('file-spreadsheet')} Export</button></div>
+        ${list.length ? `<div class="tw"><table class="t"><thead><tr><th>Time</th><th>Member</th><th>Reward</th><th class="r">Points</th><th class="hide-s">User</th></tr></thead><tbody>${list.map(x => `<tr><td style="white-space:nowrap">${fmtDT(x.time)}</td>
+          <td><b>${esc(mName(x.memberId))}</b></td><td>${esc(x.note)}</td><td class="r"><span class="tag r">${money(x.points)}</span></td><td class="hide-s">${esc(x.user)}</td></tr>`).join('')}</tbody></table></div>` : empty('gift')}</div>`;
+      acts = Object.assign(common, { exp: () => downloadCsv('rewards-history', [['Time', 'Member', 'Reward', 'Points', 'User']].concat(list.map(x => [fmtDT(x.time), mName(x.memberId), x.note, x.points, x.user]))) });
+      return;
+    }
+
+    if (S.mtab === 'report') {
+      const hit = id => { const m = DB.get('Members', id); return !q || (m && mText(m).includes(q)); };
+      const tx = ledger.filter(x => hit(x.memberId)), plus = tx.filter(x => num(x.points) > 0), minus = tx.filter(x => num(x.points) < 0);
+      const sum = a => a.reduce((s, x) => s + num(x.points), 0), uniq = a => new Set(a.map(x => x.memberId)).size;
+      const days = new Set(); for (let d = new Date(S.d1 + 'T00:00:00'), k = 0; dayOf(d) <= S.d2 && k < 366; d.setDate(d.getDate() + 1), k++) days.add(dayOf(d).slice(5));
+      const bdays = members.filter(m => m.birthday && days.has(String(m.birthday).slice(5)));
+      const by = {}; tx.forEach(x => { const r = by[x.memberId] = by[x.memberId] || { id: x.memberId, add: 0, use: 0, n: 0 }; if (num(x.points) > 0) r.add += num(x.points); else r.use -= num(x.points); r.n++; });
+      const rows = Object.values(by).sort((a, b) => b.add + b.use - a.add - a.use);
+      const stat = (cls, icon, title, val, unit, sub) => `<div class="mstat ${cls}"><span class="ib">${ic(icon)}</span><span class="grow"><small>${title}</small><b>${val} <em>${unit}</em></b><i>${sub}</i></span></div>`;
+      const table = S.rmode === 'member'
+        ? (rows.length ? `<table class="t"><thead><tr><th>Member ID</th><th>Name</th><th class="r">Points Added</th><th class="r">Points Used</th><th class="r hide-s">transactions</th><th class="r">Remaining points</th></tr></thead><tbody>${rows.map(r => { const m = DB.get('Members', r.id) || {};
+            return `<tr><td>${esc(m.code || '—')}</td><td><b>${esc(m.name || '—')}</b></td><td class="r"><span class="tag g">+${money(r.add)}</span></td><td class="r"><span class="tag r">-${money(r.use)}</span></td><td class="r hide-s">${r.n}</td><td class="r"><b>${money(m.points)}</b></td></tr>`; }).join('')}</tbody></table>` : empty('chart-line'))
+        : (tx.length ? `<table class="t"><thead><tr><th>Time</th><th>Member</th><th>Type</th><th class="hide-s">Note</th><th class="r">Points</th></tr></thead><tbody>${tx.map(x => `<tr><td style="white-space:nowrap">${fmtDT(x.time)}</td><td><b>${esc(mName(x.memberId))}</b></td>
+            <td><span class="tag ${(KIND[x.kind] || KIND.adjust)[1]}">${(KIND[x.kind] || KIND.adjust)[0]}</span></td><td class="hide-s">${esc(x.note)}</td><td class="r"><b>${num(x.points) > 0 ? '+' : ''}${money(x.points)}</b></td></tr>`).join('')}</tbody></table>` : empty('chart-line'));
+      root.innerHTML = `${tabs}<div class="card gcard"><div class="gbar">${dates}<button class="btn-soft" data-act="today">${ic('calendar')} Today</button><span class="sp"></span><button class="btn" data-act="exp" ${tx.length ? '' : 'disabled'}>${ic('file-spreadsheet')} Export</button></div>
+        <div class="mstats">${stat('g', 'circle-plus', 'Points Added', '+' + money(sum(plus)), 'Point', `${uniq(plus)} members · ${plus.length} transactions`)}${stat('r', 'circle-minus', 'Points Used', '-' + money(-sum(minus)), 'Point', `${uniq(minus)} members · ${minus.length} transactions`)}
+          ${stat('p', 'cake', 'Member Birthdays', bdays.length, 'people', bdays.length ? esc(bdays.slice(0, 4).map(m => m.name).join(', ')) : 'Members with a birthday in the selected dates')}</div>
+        <div class="gbar" style="border-top:1px solid var(--line)"><div class="seg"><button class="${S.rmode === 'member' ? 'on' : ''}" data-act="rmode" data-id="member">${ic('users')} By member</button><button class="${S.rmode === 'tx' ? 'on' : ''}" data-act="rmode" data-id="tx">${ic('list')} All transactions</button></div>
+          <span class="sp"></span>${search('Filter by name / phone / member ID')}</div>
+        <div class="tw">${table}</div></div>`;
+      acts = Object.assign(common, {
+        rmode: el => { S.rmode = el.dataset.id; render(); },
+        exp: () => downloadCsv('member-report', S.rmode === 'member'
+          ? [['Member ID', 'Name', 'Points added', 'Points used', 'Transactions', 'Remaining points']].concat(rows.map(r => { const m = DB.get('Members', r.id) || {}; return [m.code, m.name, r.add, r.use, r.n, m.points]; }))
+          : [['Time', 'Member', 'Type', 'Note', 'Points', 'User']].concat(tx.map(x => [fmtDT(x.time), mName(x.memberId), x.kind, x.note, x.points, x.user])))
+      });
+      return;
+    }
+
+    const list = members.filter(m => (S.mtype === 'all' || (S.mtype === 'none' ? !typeName(m.typeId) : m.typeId === S.mtype)) && mText(m).includes(q));
+    const opt = (val, label) => `<option value="${esc(val)}" ${val === S.mtype ? 'selected' : ''}>${esc(label)}</option>`;
+    root.innerHTML = `${tabs}<div class="card gcard">
+      <div class="gbar"><select class="input" data-chg="mtype" aria-label="Member Type">${opt('all', 'All type')}${types.map(x => opt(x.id, x.name)).join('')}${opt('none', 'Unknown')}</select>${search()}
+        <span class="sp"></span><button class="btn green" data-act="add">${ic('plus')} ${esc(t('add'))}</button></div>
+      ${list.length ? `<div class="tw"><table class="t mtable"><thead><tr><th>#</th><th></th><th>Member ID</th><th>Name</th><th class="r">Remaining points</th><th class="r hide-s">Accumulated points</th><th>Type</th><th></th></tr></thead><tbody>
+      ${list.map(m => `<tr><td class="mut">${esc(m.id)}</td><td><span class="mav" style="background:${color(m.name)}">${esc((m.name || '?')[0])}</span></td><td><span class="code">${esc(m.code || '—')}</span></td>
+        <td><b>${esc(m.name)}</b><small class="mut" style="display:block">${esc(m.phone || '')}${m.username ? ` · @${esc(m.username)}` : ''}</small></td>
+        <td class="r"><b>${money(m.points)}</b></td><td class="r hide-s">${money(accPts(m))}</td><td><span class="tag ${typeName(m.typeId) ? 'b' : 'n'}">${esc(typeName(m.typeId) || 'Unknown')}</span></td>
+        <td class="r" style="white-space:nowrap"><button class="sqb c" data-act="view" data-id="${esc(m.id)}" aria-label="View">${ic('eye')}</button><button class="sqb a" data-act="edit" data-id="${esc(m.id)}" aria-label="Edit">${ic('square-pen')}</button><button class="sqb r" data-act="del" data-id="${esc(m.id)}" aria-label="${esc(t('delete'))}">${ic('trash-2')}</button></td></tr>`).join('')}</tbody></table></div>` : empty('users')}
+      <div class="gfoot">${list.length} / ${members.length} ${esc(t('member'))}</div></div>`;
+    acts = Object.assign(common, {
+      mtype: el => { S.mtype = el.value; render(); },
+      add: () => { if (!types.length) { toast('Add a member type first', 'bad'); S.mtab = 'type'; render(true); return; } memberModal({}, { points: 0, typeId: S.mtype !== 'all' && S.mtype !== 'none' ? S.mtype : '' }); },
+      view: el => viewMember(DB.get('Members', el.dataset.id)),
+      edit: el => { const m = DB.get('Members', el.dataset.id); memberModal(m, { ...m, password: '' }); },
+      del: el => { const m = DB.get('Members', el.dataset.id); confirmBox(`${t('delete')} ${m.name}?`, () => { DB.remove('Members', m.id); render(); }); }
+    });
   };
 
   /* ---------- Logs ---------- */
@@ -694,9 +882,57 @@
     $('#langMenu').innerHTML = I18N.LANGS.map(l => `<button data-l="${l.code}" class="${l.code === I18N.lang ? 'on' : ''}">${l.flag} ${l.label}</button>`).join('');
   }
   $('#langMenu').onclick = e => { const b = e.target.closest('[data-l]'); if (b) { I18N.set(b.dataset.l); langUi(); render(); } };
-  window.addEventListener('rf-lang', () => { langUi(); render(); });
-  $('#userMenu').innerHTML = `<div class="mi"><b>${esc(U.name || U.username)}</b><small>${esc(U.username)} · ${esc(U.store || '')}</small></div><button data-out>${ic('log-out')} <span>${esc(t('logout'))}</span></button>`;
-  $('#userMenu').onclick = e => { if (e.target.closest('[data-out]')) logout(); };
+  window.addEventListener('rf-lang', () => { langUi(); userMenu(); render(); });
+  /* account menu: profile, password, log out */
+  const ACC_ERR = { 'Wrong password': 'Current password is not correct', 'Username already exists': 'That username is already taken', 'Invalid username': 'Use a-z, 0-9, dot or dash, 3–30 characters', 'Failed to fetch': 'Could not save. Check your connection.' };
+  function accountForm(title, icon, body, onSave) {
+    const m = modal(`<form novalidate><h3>${ic(icon)} ${esc(title)}</h3>${body}
+      <div class="actions"><button type="button" class="btn ghost" data-close>${esc(t('close'))}</button><button class="btn" data-go>${ic('save')} ${esc(t('save'))}</button></div></form>`);
+    const f = $('form', m.el), btn = $('[data-go]', m.el);
+    f.addEventListener('submit', async e => {
+      e.preventDefault(); if (btn.disabled) return;
+      const o = Object.fromEntries(new FormData(f)); Object.keys(o).forEach(k => { if (!/^pw/.test(k)) o[k] = o[k].trim(); });
+      btn.disabled = true;
+      try { const msg = await onSave(o); if (msg === false) return; m.close(); toast(msg); }
+      catch (err) { if (err.message === 'auth') { DB.logout(); location.replace('index.html'); return; } toast(ACC_ERR[err.message] || err.message || 'Could not save. Check your connection.', 'bad'); }
+      finally { btn.disabled = false; }
+    });
+  }
+  const fi = (k, label, val, attrs = '') => `<div class="f"><label>${esc(label)}</label><input name="${k}" value="${esc(val == null ? '' : val)}" ${attrs}></div>`;
+  function profileModal() {
+    accountForm('Profile', 'user-pen',
+      fi('name', 'Full name', U.name, 'maxlength="80"') + fi('store', 'Store name', U.store, 'maxlength="80"') + fi('phone', 'Phone', U.phone, 'maxlength="20" inputmode="tel"') +
+      fi('email', 'Email', U.email, 'maxlength="120" type="email"') + fi('address', 'Address', U.address, 'maxlength="200"') +
+      fi('', 'Username', U.username, 'disabled') + '<p class="hint" style="margin-top:6px">The username cannot be changed.</p>',
+      async o => {
+        if (!o.name) { toast('Enter a name', 'bad'); return false; }
+        const user = await DB.updateProfile({ ...o, username: U.username });
+        Object.keys(U).forEach(k => delete U[k]); Object.assign(U, user);
+        userMenu(); render();
+        return 'Profile updated';
+      });
+  }
+  function passwordModal() {
+    accountForm('Change password', 'key-round',
+      fi('pwOld', 'Current password', '', 'type="password" autocomplete="current-password"') + fi('pwNew', 'New password', '', 'type="password" autocomplete="new-password"') +
+      fi('pwNew2', 'Confirm new password', '', 'type="password" autocomplete="new-password"'),
+      async o => {
+        if (!o.pwOld) { toast('Enter your current password', 'bad'); return false; }
+        if (o.pwNew.length < 6) { toast('Use at least 6 characters', 'bad'); return false; }
+        if (o.pwNew !== o.pwNew2) { toast('The new passwords do not match', 'bad'); return false; }
+        await DB.changePassword(o.pwOld, o.pwNew);
+        DB.log('Change password', '');
+        return 'Password changed';
+      });
+  }
+  function userMenu() {
+    $('#userMenu').innerHTML = `<div class="mi"><b>${esc(U.name || U.username)}</b><small>${esc(U.username)} · ${esc(U.store || '')}</small></div>
+      <button data-prof>${ic('user-pen')} <span>Profile</span></button><button data-pass>${ic('key-round')} <span>Change password</span></button>
+      <button data-out class="danger">${ic('log-out')} <span>${esc(t('logout'))}</span></button>`;
+    icons();
+  }
+  userMenu();
+  $('#userMenu').onclick = e => { if (e.target.closest('[data-prof]')) profileModal(); else if (e.target.closest('[data-pass]')) passwordModal(); else if (e.target.closest('[data-out]')) logout(); };
   function bell() {
     const n = [];
     DB.list('Bills').filter(b => b.status === 'open').forEach(b => { const k = DB.items(b).filter(i => i.src === 'qr' && i.status !== 'served').length; if (k) n.push(['qr-code', `${b.tableName}: ${k} new QR order item(s)`, 'Open POS to serve']); });

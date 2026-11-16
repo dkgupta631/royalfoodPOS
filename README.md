@@ -44,7 +44,7 @@ The product columns `code`, `nameEn`, `image`, `desc`, `descEn`, `buffet`, `byWe
 
 ## Row ids
 
-Every tab uses plain number ids: 1, 2, 3 … Each device takes its ids from a small block of numbers handed out by the script, so two devices never create the same id. With more than one device the numbers can skip (for example 1–10 on one device, 11–20 on another).
+Every tab uses plain number ids: 1, 2, 3 … Each device takes its ids from a small block of numbers handed out by the script, so two devices never create the same id. With more than one device the numbers can skip (for example 1–10 on one device, 11–20 on another). On a single device the numbers run 1, 2, 3 … without gaps.
 
 To convert a sheet that still has old ids such as `P1` or `Bmwh…`: let every device finish syncing, then in Apps Script choose the `renumberIds` function and press **Run** once, and reload the app on every device. Table QR codes contain the table id, so print them again afterwards.
 
