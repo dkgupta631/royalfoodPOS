@@ -318,7 +318,7 @@
           printHtml(`<div class="tk"><h3>${esc(U.store || CFG.BRAND)}</h3><div class="c qt">${esc(tb.name)}</div><div class="c"><img class="qimg" src="${c.toDataURL('image/png')}" alt=""></div><div class="c"><b>Scan to order food</b></div></div>`); };
         draw();
       },
-      cancel: () => confirmBox(`${t('cancel')} ${tb.name}?`, () => { Object.assign(bill, { status: 'cancelled', closedAt: new Date().toISOString() }); DB.save('Bills', bill); DB.log('Cancel bill', `${tb.name} ${money(c.total)}`); toast('Bill cancelled'); render(); }),
+      cancel: () => confirmBox(`${t('cancel')} ${tb.name}?`, () => { Object.assign(bill, { status: 'cancelled', closedAt: new Date().toISOString() }); DB.save('Bills', bill); if (pulseOk) { cancelSaid.add(bill.id); announce('cancel', tb.name); } DB.log('Cancel bill', `${tb.name} ${money(c.total)}`); toast('Bill cancelled'); render(); }),
       move: () => {
         const free = bySort(DB.list('Tables')).filter(x => !DB.openBill(x.id));
         const m = modal(`<h3>${esc(t('move'))} ${esc(tb.name)} →</h3><div class="chips" style="margin-top:14px">${free.map(x => `<button class="chip" data-to="${esc(x.id)}">${esc(x.name)}</button>`).join('') || empty()}</div><div class="actions"><button class="btn gray" data-close>${esc(t('close'))}</button></div>`);
@@ -878,39 +878,79 @@
     cancel: { en: tb => `Order cancelled. Table ${tb}.`, th: tb => `ยกเลิกออเดอร์ โต๊ะ ${tb}`, km: tb => `បានបោះបង់ការកុម្ម៉ង់ តុ ${tb}`, lo: tb => `ຍົກເລີກອໍເດີ ໂຕະ ${tb}`, zh: tb => `订单已取消，${tb} 桌` }
   };
   let actx = null;
+  // A long, loud alarm: two rounds of beeps through a limiter so it plays at full level without crackling.
   function chime(bad) {
     try {
       actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume();
-      (bad ? [784, 523, 392] : [880, 1175, 1568, 1175, 1568]).forEach((f, i) => {
-        const o = actx.createOscillator(), g = actx.createGain(), t0 = actx.currentTime + i * .16;
-        o.type = 'square'; o.frequency.value = f; g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(.9, t0 + .02); g.gain.exponentialRampToValueAtTime(.0001, t0 + .3);
-        o.connect(g); g.connect(actx.destination); o.start(t0); o.stop(t0 + .32);
+      const out = actx.createDynamicsCompressor(); out.threshold.value = -6; out.ratio.value = 12; out.connect(actx.destination);
+      const seq = bad ? [784, 523, 392, 784, 523, 392] : [988, 1319, 1760, 1319, 1760, 0, 988, 1319, 1760, 1319, 1760];
+      seq.forEach((f, i) => {
+        if (!f) return;
+        const t0 = actx.currentTime + i * .15;
+        [f, f * 2].forEach((hz, k) => {                       // the note plus its octave: cuts through kitchen noise
+          const o = actx.createOscillator(), g = actx.createGain();
+          o.type = 'square'; o.frequency.value = hz; g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(k ? .45 : 1, t0 + .015); g.gain.exponentialRampToValueAtTime(.0001, t0 + .28);
+          o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + .3);
+        });
       });
-    } catch (e) {}
+      return seq.length * .15 + .25;
+    } catch (e) { return 0; }
   }
+  let soundTip = 0;
   function announce(kind, table, n, force) {
     if (SET.voice === false && !force) return;
-    chime(kind === 'cancel');
+    const wait = chime(kind === 'cancel');
+    if ((!actx || actx.state !== 'running') && Date.now() - soundTip > 60000) { soundTip = Date.now(); toast('Tap the screen once to turn the alert sound on', 'bad'); } // browsers mute pages nobody has touched yet
     try {
       const voices = speechSynthesis.getVoices(), v = voices.find(x => String(x.lang).toLowerCase().startsWith(VOICE[I18N.lang] || 'en')), lang = v ? I18N.lang : 'en'; // no voice for this language on the device: speak English
-      const u = new SpeechSynthesisUtterance((SAY[kind][lang] || SAY[kind].en)(table, n));
-      if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-US';
-      u.volume = 1; u.rate = .92;
-      setTimeout(() => { try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) {} }, kind === 'cancel' ? 550 : 850);
+      const text = (SAY[kind][lang] || SAY[kind].en)(table, n);
+      setTimeout(() => {
+        try {
+          speechSynthesis.resume();
+          for (let i = 0; i < 2; i++) {                       // said twice, at full volume
+            const u = new SpeechSynthesisUtterance(text);
+            if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-US';
+            u.volume = 1; u.rate = .9; u.pitch = 1.1;
+            speechSynthesis.speak(u);
+          }
+        } catch (e) {}
+      }, wait * 1000);
     } catch (e) {}
   }
   try { speechSynthesis.getVoices(); } catch (e) {} // voices load in the background; ask early
-  document.addEventListener('click', () => { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch (e) {} }, { once: true }); // browsers only allow sound after a first tap
+  const wake = () => { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch (e) {} };
+  ['click', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, wake, { passive: true })); // browsers only allow sound after a first tap
   // Compares the bills with how they looked a moment ago and speaks about what changed.
-  let billSnap = null;
-  function watchOrders() {
-    const now = {}; DB.list('Bills').forEach(b => { now[b.id] = { s: b.status, t: b.tableName, q: DB.items(b).filter(i => i.src === 'qr').reduce((a, i) => a + num(i.qty), 0) }; });
+  // With a sheet connected the comparison uses the quick "pulse" check (every 5 s); otherwise the data already in the app.
+  let billSnap = null, pulseOk = false;
+  const cancelSaid = new Set();
+  function watchOrders(now, fromPulse) {
+    if (pulseOk && !fromPulse) return;
+    if (!now) { now = {}; DB.list('Bills').forEach(b => { now[b.id] = { s: b.status, t: b.tableName, q: DB.items(b).filter(i => i.src === 'qr').reduce((a, i) => a + num(i.qty), 0) }; }); }
     if (billSnap) Object.keys(now).forEach(id => {
       const a = billSnap[id], b = now[id], added = b.q - (a ? a.q : 0);
       if (b.s === 'open' && added > 0) { announce('order', b.t, added); toast(`${b.t}: ${added} new QR order item(s)`); }
-      else if (a && a.s === 'open' && b.s === 'cancelled') announce('cancel', b.t);
+      else if (a && a.s === 'open' && b.s === 'cancelled' && !cancelSaid.has(id)) announce('cancel', b.t);
     });
     billSnap = now;
+  }
+  const quiet = () => !DB.pending && !document.querySelector('.modal-back') && !(document.activeElement && document.activeElement.matches('input,select,textarea'));
+  let pulseBusy = false, pulseSig = '';
+  async function pulse() {
+    if (pulseBusy || !DB.remote) return;
+    pulseBusy = true;
+    try {
+      const bills = await DB.pulse();
+      if (bills) {
+        const now = {}; bills.forEach(b => { now[b.id] = { s: b.s, t: b.t, q: num(b.q) }; });
+        if (!pulseOk && billSnap) Object.keys(billSnap).forEach(id => { if (!now[id] && billSnap[id].s !== 'open') now[id] = billSnap[id]; });
+        pulseOk = true; watchOrders(now, true);
+        const sig = JSON.stringify(bills);
+        if (pulseSig && sig !== pulseSig && quiet()) resync(true);   // something changed: refresh the screen straight away
+        pulseSig = sig;
+      }
+    } catch (e) {}
+    pulseBusy = false;
   }
 
   /* ================= SHELL ================= */
@@ -1048,7 +1088,7 @@
   if (!location.hash) history.replaceState(null, '', '#/dashboard');
   render(true); syncUi();
   setTimeout(() => $('#splash').classList.remove('show'), 500);
-  if (DB.remote) setInterval(() => { if (!DB.pending && !document.querySelector('.modal-back') && !(document.activeElement && document.activeElement.matches('input,select'))) resync(true); }, 10000);
+  if (DB.remote) { setInterval(() => { if (quiet()) resync(true); }, 30000); setInterval(pulse, 5000); }
   // demo mode keeps its data in this browser: pick up orders placed from another tab straight away
   if (!DB.remote) window.addEventListener('storage', e => { if (e.key === 'rf_db' && !document.querySelector('.modal-back')) DB.load().then(() => render()); });
 })();

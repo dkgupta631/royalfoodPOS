@@ -53,6 +53,7 @@ function doPost(e) {
     switch (b.action) {
       case 'profile': return out_(withLock_(function () { return profile_(b); }));
       case 'password': return out_(withLock_(function () { return password_(b); }));
+      case 'pulse': return out_(pulse_());
       case 'ids': // a device asks for blocks of unused id numbers, e.g. {Bills: 10, Logs: 10}
         return out_(withLock_(function () {
           var ids = {};
@@ -153,6 +154,15 @@ function register_(b) {
     upsert_('Users', u);
     return newSession_(u);
   });
+}
+
+/* ---------- order alerts ---------- */
+/** A small, quick answer the app asks for every few seconds: open bills and bills cancelled in the last day, with how many QR-ordered items each has. */
+function pulse_() {
+  var since = Date.now() - 864e5;
+  var bills = read_('Bills').filter(function (x) { return x.status === 'open' || (x.status === 'cancelled' && new Date(x.closedAt).getTime() > since); })
+    .map(function (x) { var q = 0; try { JSON.parse(x.items || '[]').forEach(function (i) { if (i.src === 'qr') q += Number(i.qty) || 0; }); } catch (e) {} return { id: x.id, s: x.status, t: x.tableName, q: q }; });
+  return { ok: true, bills: bills };
 }
 
 /* ---------- customer QR menu ---------- */

@@ -261,7 +261,14 @@ const DB = (() => {
     return { ok: true };
   }
 
-  return { remote, session, login, register, hash, memberHome, updateProfile, changePassword, logout, recent, forget, load, flush, list, get, save, remove, log, items, setItems, calc, openBill, newBill,
+  // a quick look at the open and just-cancelled bills, used for the order alerts
+  async function pulse() {
+    if (!remote) return null;
+    const res = await api({ action: 'pulse', token: (session() || {}).token });
+    if (!res.ok) { if (res.error === 'auth') setStatus('auth'); return null; }
+    return res.bills || [];
+  }
+  return { remote, session, pulse, login, register, hash, memberHome, updateProfile, changePassword, logout, recent, forget, load, flush, list, get, save, remove, log, items, setItems, calc, openBill, newBill,
     publicMenu, publicOrder, img, extras, names, pname, num, uid, onStatus: f => subs.push(f), get status() { return status; }, get pending() { return queue.length; },
     export: () => JSON.stringify(data, null, 2) };
 })();
