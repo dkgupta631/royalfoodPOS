@@ -823,6 +823,49 @@
       ${logs.map(l => `<tr><td style="white-space:nowrap">${fmtDT(l.time)}</td><td>${esc(l.user)}</td><td><span class="tag b">${esc(l.action)}</span></td><td>${esc(l.detail)}</td></tr>`).join('')}</tbody></table>${logs.length ? '' : empty('history')}</div>`;
   };
 
+  /* ---------- voice alerts: a loud chime, then a spoken message, when a guest QR order arrives or a bill is cancelled ---------- */
+  const VOICE = { th: 'th', km: 'km', lo: 'lo', zh: 'zh', en: 'en' };
+  const SAY = {
+    order: { en: (tb, n) => `New order. Table ${tb}. ${n} ${n === 1 ? 'item' : 'items'}.`, th: (tb, n) => `มีออเดอร์ใหม่ โต๊ะ ${tb} จำนวน ${n} รายการ`, km: (tb, n) => `មានការកុម្ម៉ង់ថ្មី តុ ${tb} ចំនួន ${n} មុខ`,
+      lo: (tb, n) => `ມີອໍເດີໃໝ່ ໂຕະ ${tb} ຈຳນວນ ${n} ລາຍການ`, zh: (tb, n) => `新订单，${tb} 桌，${n} 项` },
+    cancel: { en: tb => `Order cancelled. Table ${tb}.`, th: tb => `ยกเลิกออเดอร์ โต๊ะ ${tb}`, km: tb => `បានបោះបង់ការកុម្ម៉ង់ តុ ${tb}`, lo: tb => `ຍົກເລີກອໍເດີ ໂຕະ ${tb}`, zh: tb => `订单已取消，${tb} 桌` }
+  };
+  let actx = null;
+  function chime(bad) {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume();
+      (bad ? [784, 523, 392] : [880, 1175, 1568, 1175, 1568]).forEach((f, i) => {
+        const o = actx.createOscillator(), g = actx.createGain(), t0 = actx.currentTime + i * .16;
+        o.type = 'square'; o.frequency.value = f; g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(.9, t0 + .02); g.gain.exponentialRampToValueAtTime(.0001, t0 + .3);
+        o.connect(g); g.connect(actx.destination); o.start(t0); o.stop(t0 + .32);
+      });
+    } catch (e) {}
+  }
+  function announce(kind, table, n, force) {
+    if (SET.voice === false && !force) return;
+    chime(kind === 'cancel');
+    try {
+      const voices = speechSynthesis.getVoices(), v = voices.find(x => String(x.lang).toLowerCase().startsWith(VOICE[I18N.lang] || 'en')), lang = v ? I18N.lang : 'en'; // no voice for this language on the device: speak English
+      const u = new SpeechSynthesisUtterance((SAY[kind][lang] || SAY[kind].en)(table, n));
+      if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-US';
+      u.volume = 1; u.rate = .92;
+      setTimeout(() => { try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) {} }, kind === 'cancel' ? 550 : 850);
+    } catch (e) {}
+  }
+  try { speechSynthesis.getVoices(); } catch (e) {} // voices load in the background; ask early
+  document.addEventListener('click', () => { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch (e) {} }, { once: true }); // browsers only allow sound after a first tap
+  // Compares the bills with how they looked a moment ago and speaks about what changed.
+  let billSnap = null;
+  function watchOrders() {
+    const now = {}; DB.list('Bills').forEach(b => { now[b.id] = { s: b.status, t: b.tableName, q: DB.items(b).filter(i => i.src === 'qr').reduce((a, i) => a + num(i.qty), 0) }; });
+    if (billSnap) Object.keys(now).forEach(id => {
+      const a = billSnap[id], b = now[id], added = b.q - (a ? a.q : 0);
+      if (b.s === 'open' && added > 0) { announce('order', b.t, added); toast(`${b.t}: ${added} new QR order item(s)`); }
+      else if (a && a.s === 'open' && b.s === 'cancelled') announce('cancel', b.t);
+    });
+    billSnap = now;
+  }
+
   /* ================= SHELL ================= */
   const NAV = [['dashboard', 'home', 'house'], ['pos', 'pos', 'shopping-cart'], ['pos3d', 'pos3d', 'box'], ['goods', 'goods', 'package'], ['tables', 'tables', 'layout-grid'], ['inventory', 'inventory', 'boxes'], ['member', 'member', 'users'], ['logs', 'logs', 'clock']];
   function render(anim) {
@@ -832,7 +875,7 @@
     $('#title').textContent = t(def[1]); document.title = `${t(def[1])} — ${CFG.BRAND} POS`;
     $('#nav').innerHTML = NAV.map(n => `<a href="#/${n[0]}" class="${n[0] === S.route ? 'on' : ''}"><span class="ni">${ic(n[2])}</span><span>${esc(t(n[1]))}</span></a>`).join('');
     view.classList.toggle('anim', changed || anim === true);
-    V[S.route](view); icons(); bell();
+    V[S.route](view); icons(); bell(); watchOrders();
     if (changed) view.scrollTop = 0;
     if (S.focusQ) { const i = $('[data-q]', view); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } S.focusQ = false; }
   }
@@ -856,7 +899,7 @@
     <div class="actions"><button class="btn gray" data-close>${esc(t('close'))}</button></div>`);
   async function resync(quiet) {
     $('#btnSync').classList.add('syncing');
-    try { await DB.flush(); await DB.load(); if (!document.querySelector('.modal-back')) render(); if (!quiet) toast(DB.status === 'offline' ? 'Offline — changes are saved on this device' : 'Data is up to date', DB.status === 'offline' ? 'bad' : 'ok'); }
+    try { await DB.flush(); await DB.load(); if (!document.querySelector('.modal-back')) render(); else watchOrders(); if (!quiet) toast(DB.status === 'offline' ? 'Offline — changes are saved on this device' : 'Data is up to date', DB.status === 'offline' ? 'bad' : 'ok'); }
     catch (e) { if (e.message !== 'auth' && !quiet) toast('Sync failed', 'bad'); }
     syncUi();
   }
@@ -865,17 +908,20 @@
   DB.onStatus(s => { syncUi(); if (s === 'auth') { DB.logout(); location.replace('index.html'); } });
   function logout() { confirmBox(t('logout') + '?', () => { DB.log('Logout', ''); DB.logout(); location.replace('index.html'); }, false); }
   $('#btnSet').onclick = () => {
-    const sw = (k, label, hint) => `<label class="sw srow"><span>${esc(label)}${hint ? `<small>${esc(hint)}</small>` : ''}</span><input type="checkbox" data-set="${k}" ${SET[k] ? 'checked' : ''}><i></i></label>`;
+    const sw = (k, label, hint) => `<label class="sw srow"><span>${esc(label)}${hint ? `<small>${esc(hint)}</small>` : ''}</span><input type="checkbox" data-set="${k}" ${(k === 'voice' ? SET.voice !== false : SET[k]) ? 'checked' : ''}><i></i></label>`;
     const m = modal(`<header class="pm-head"><span class="pm-ic blue">${ic('settings')}</span><div class="pm-ttl"><h3>${esc(t('settings'))}</h3><small>Printing · Other settings</small></div>
         <button type="button" class="pm-x" data-close aria-label="${esc(t('close'))}">${ic('x')}</button></header>
       <div class="dr-body">
         <section class="sg"><h4>${ic('printer')} Print system in the kitchen</h4>
           ${sw('cashier', 'Print in the cashier', 'Order slip with prices')}${sw('k1', 'Print 1st kitchen')}${sw('k2', 'Kitchen printing system number 2')}${sw('k3', 'Kitchen print v3', 'Large-text ticket')}</section>
         <section class="sg"><h4>${ic('sliders-horizontal')} Other settings</h4>
-          ${sw('quick', 'Add quick bill', 'Sell without a table from POS')}${sw('queueCard', 'Print queue card', 'When a queue number is added')}</section>
+          ${sw('quick', 'Add quick bill', 'Sell without a table from POS')}${sw('queueCard', 'Print queue card', 'When a queue number is added')}
+          ${sw('voice', 'Voice alert for orders', 'Loud chime and spoken message for a new QR order or a cancelled bill')}
+          <div class="srow"><span>Test the alert sound<small>Check the volume of this device</small></span><button type="button" class="btn-soft" data-test>${ic('volume-2')} Test sound</button></div></section>
         <p class="hint">These switches are saved on this device. Tickets print when dishes are added in POS, through the browser print dialog.</p>
       </div>`, 'drawer');
     m.el.addEventListener('change', e => { const k = e.target.dataset.set; if (!k) return; SET[k] = e.target.checked; saveSet(); if (S.route === 'pos') render(); });
+    $('[data-test]', m.el).onclick = () => announce('order', 'GB 1', 2, true);
   };
   function langUi() {
     $('#btnLang').innerHTML = I18N.cur.flag;
@@ -955,5 +1001,7 @@
   if (!location.hash) history.replaceState(null, '', '#/dashboard');
   render(true); syncUi();
   setTimeout(() => $('#splash').classList.remove('show'), 500);
-  if (DB.remote) setInterval(() => { if (!DB.pending && !document.querySelector('.modal-back') && document.visibilityState === 'visible' && !(document.activeElement && document.activeElement.matches('input,select'))) resync(true); }, 25000);
+  if (DB.remote) setInterval(() => { if (!DB.pending && !document.querySelector('.modal-back') && !(document.activeElement && document.activeElement.matches('input,select'))) resync(true); }, 10000);
+  // demo mode keeps its data in this browser: pick up orders placed from another tab straight away
+  if (!DB.remote) window.addEventListener('storage', e => { if (e.key === 'rf_db' && !document.querySelector('.modal-back')) DB.load().then(() => render()); });
 })();
